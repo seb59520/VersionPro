@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useStands } from '../context/StandsContext';
 import { MapPin, Calendar, User, ArrowLeft, BookOpen, AlertTriangle, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -8,22 +7,72 @@ import { toast } from 'react-hot-toast';
 import Modal from './Modal';
 import PosterRequestModal from './PosterRequestModal';
 import PublicationStockModal from './PublicationStockModal';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { DisplayStand, Publication, Poster } from '../types';
 
 const PublicStandView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { stands, availablePosters, publications } = useStands();
+  const [stand, setStand] = useState<DisplayStand | null>(null);
+  const [publications, setPublications] = useState<Publication[]>([]);
+  const [availablePosters, setAvailablePosters] = useState<Poster[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [showPosterRequestModal, setShowPosterRequestModal] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
 
-  const stand = stands.find(s => s.id === id);
+  useEffect(() => {
+    if (!id) return;
+
+    // Charger les données du présentoir
+    const standRef = doc(db, 'stands', id);
+    const unsubscribe = onSnapshot(standRef, (doc) => {
+      if (doc.exists()) {
+        setStand({ id: doc.id, ...doc.data() } as DisplayStand);
+      } else {
+        setStand(null);
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error('Erreur lors du chargement du présentoir:', error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  if (!stand) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="card p-8 max-w-md w-full text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Présentoir non trouvé
+          </h2>
+          <p className="text-gray-600 mb-6">
+            Le présentoir demandé n'existe pas ou n'est plus disponible.
+          </p>
+          <button
+            onClick={() => navigate('/')}
+            className="btn btn-primary inline-flex items-center"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Retour à l'accueil
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleReservation = async (data: any) => {
-    if (!stand) return;
-
     try {
       const standRef = doc(db, 'stands', stand.id);
       await updateDoc(standRef, {
@@ -50,8 +99,6 @@ const PublicStandView = () => {
   };
 
   const handlePosterRequest = async (requestedPoster: string, notes: string) => {
-    if (!stand) return;
-
     try {
       const standRef = doc(db, 'stands', stand.id);
       await updateDoc(standRef, {
@@ -78,8 +125,6 @@ const PublicStandView = () => {
   };
 
   const handleUpdateStock = async (publicationId: string, quantity: number) => {
-    if (!stand) return;
-
     try {
       const standRef = doc(db, 'stands', stand.id);
       await updateDoc(standRef, {
@@ -96,28 +141,6 @@ const PublicStandView = () => {
       toast.error('Erreur lors de la mise à jour');
     }
   };
-
-  if (!stand) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="card p-8 max-w-md w-full text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Présentoir non trouvé
-          </h2>
-          <p className="text-gray-600 mb-6">
-            Le présentoir demandé n'existe pas ou n'est plus disponible.
-          </p>
-          <button
-            onClick={() => navigate('/')}
-            className="btn btn-primary inline-flex items-center"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Retour à l'accueil
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   const hasLowStock = (stand.publications || []).some(pub => {
     const publication = publications.find(p => p.id === pub.publicationId);
@@ -171,7 +194,7 @@ const PublicStandView = () => {
                         <div key={index} className="flex justify-between items-center">
                           <span className="text-gray-700">{publication.title}</span>
                           <span className={`px-2 py-1 rounded-full text-sm ${
-                            pub.quantity < publication.minStock
+                            pub.quantity < (publication.minStock || 0)
                               ? 'bg-yellow-100 text-yellow-700'
                               : 'bg-green-100 text-green-700'
                           }`}>
