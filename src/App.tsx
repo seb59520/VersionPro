@@ -29,17 +29,13 @@ const App: React.FC = () => {
         />
         
         <Routes>
-          {/* Routes publiques */}
+          {/* Routes publiques - pas besoin d'authentification */}
           <Route path="/login" element={<Login />} />
-          <Route path="/stand/:id" element={<PublicStandView />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
+          <Route path="/stand/:id" element={<PublicStandView />} />
           
-          {/* Routes protégées */}
-          <Route path="/" element={
-            <AuthGuard>
-              <Layout />
-            </AuthGuard>
-          }>
+          {/* Routes protégées - nécessitent une authentification */}
+          <Route element={<AuthGuard><Layout /></AuthGuard>}>
             <Route index element={<Dashboard />} />
             <Route path="statistics" element={<Statistics />} />
             <Route path="maintenance" element={<MaintenanceDashboard />} />
@@ -49,7 +45,7 @@ const App: React.FC = () => {
               </AuthGuard>
             } />
             <Route path="details/:type" element={<StandDetails />} />
-            <Route path="stand/:id" element={<StandDetailPage />} />
+            <Route path="admin/stand/:id" element={<StandDetailPage />} />
           </Route>
         </Routes>
       </div>
