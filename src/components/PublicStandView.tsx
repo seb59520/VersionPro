@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MapPin, Calendar, User, ArrowLeft, BookOpen, AlertTriangle, FileText } from 'lucide-react';
-import { format } from 'date-fns';
+import { MapPin, Calendar, User, ArrowLeft, BookOpen, AlertTriangle, FileText, Clock, Users } from 'lucide-react';
+import { format, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { toast } from 'react-hot-toast';
 import Modal from './Modal';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { DisplayStand, Publication, Poster } from '../types';
+import PublicStockModal from './PublicStockModal';
+import UsageReportModal from './UsageReportModal';
+import ExtendReservationModal from './ExtendReservationModal';
+import PublicPosterRequestModal from './PublicPosterRequestModal';
 
 const PublicStandView = () => {
   const { id } = useParams();
@@ -17,6 +21,10 @@ const PublicStandView = () => {
   const [availablePosters, setAvailablePosters] = useState<Poster[]>([]);
   const [loading, setLoading] = useState(true);
   const [showReservationModal, setShowReservationModal] = useState(false);
+  const [showStockModal, setShowStockModal] = useState(false);
+  const [showUsageModal, setShowUsageModal] = useState(false);
+  const [showExtendModal, setShowExtendModal] = useState(false);
+  const [showPosterRequestModal, setShowPosterRequestModal] = useState(false);
   const [reservationData, setReservationData] = useState({
     name: '',
     startDate: '',
@@ -26,14 +34,12 @@ const PublicStandView = () => {
   useEffect(() => {
     if (!id) return;
 
-    // Charger les données du présentoir
     const standRef = doc(db, 'stands', id);
     const unsubscribe = onSnapshot(standRef, async (doc) => {
       if (doc.exists()) {
         const standData = { id: doc.id, ...doc.data() } as DisplayStand;
         setStand(standData);
 
-        // Charger les publications associées
         if (standData.organizationId) {
           const publicationsQuery = query(
             collection(db, 'publications'),
@@ -45,7 +51,6 @@ const PublicStandView = () => {
             ...doc.data()
           })) as Publication[]);
 
-          // Charger les affiches disponibles
           const postersQuery = query(
             collection(db, 'posters'),
             where('organizationId', '==', standData.organizationId),
@@ -92,6 +97,116 @@ const PublicStandView = () => {
     } catch (error) {
       console.error('Erreur lors de la réservation:', error);
       toast.error('Erreur lors de la réservation');
+    }
+  };
+
+  const handleCancelReservation = async () => {
+    if (!stand) return;
+
+    try {
+      const standRef = doc(db, 'stands', stand.id);
+      await updateDoc(standRef, {
+        isReserved: false,
+        reservedBy: null,
+        reservedUntil: null,
+        lastUpdated: new Date().toISOString()
+      });
+      
+      toast.success('Réservation annulée avec succès');
+    } catch (error) {
+      console.error('Erreur lors de l\'annulation:', error);
+      toast.error('Erreur lors de l\'annulation');
+    }
+  };
+
+  const handleUpdateStock = async (publicationId: string, quantity: number) => {
+    if (!stand) return;
+
+    try {
+      const standRef = doc(db, 'stands', stand.id);
+      await updateDoc(standRef, {
+        publications: (stand.publications || []).map(pub =>
+          pub.publicationId === publicationId
+            ? { ...pub, quantity, lastUpdated: new Date().toISOString() }
+            : pub
+        )
+      });
+      
+      toast.success('Stock mis à jour avec succès');
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour:', error);
+      toast.error('Erreur lors de la mise à jour');
+    }
+  };
+
+  const handleUsageReport = async (data: { visitorsCount: number; usageHours: number }) => {
+    if (!stand) return;
+
+    try {
+      const standRef = doc(db, 'stands', stand.id);
+      await updateDoc(standRef, {
+        usageHistory: [
+          ...(stand.usageHistory || []),
+          {
+            date: new Date().toISOString(),
+            visitorsCount: data.visitorsCount,
+            usageHours: data.usageHours
+          }
+        ]
+      });
+      
+      toast.success('Rapport d\'utilisation enregistré');
+    } catch (error) {
+      console.error('Erreur lors de l\'enregistrement:', error);
+      toast.error('Erreur lors de l\'enregistrement');
+    }
+  };
+
+  const handleExtendReservation = async (newEndDate: string) => {
+    if (!stand) return;
+
+    try {
+      const standRef = doc(db, 'stands', stand.id);
+      await updateDoc(standRef, {
+        reservedUntil: new Date(newEndDate).toISOString(),
+        lastUpdated: new Date().toISOString(),
+        reservationHistory: stand.reservationHistory.map((res, index) => 
+          index === stand.reservationHistory.length - 1
+            ? { ...res, endDate: new Date(newEndDate).toISOString() }
+            : res
+        )
+      });
+      
+      toast.success('Réservation prolongée avec succès');
+    } catch (error) {
+      console.error('Erreur lors de la prolongation:', error);
+      toast.error('Erreur lors de la prolongation');
+    }
+  };
+
+  const handlePosterRequest = async (requestedPoster: string, notes: string) => {
+    if (!stand) return;
+
+    try {
+      const standRef = doc(db, 'stands', stand.id);
+      await updateDoc(standRef, {
+        posterRequests: [
+          ...(stand.posterRequests || []),
+          {
+            id: crypto.randomUUID(),
+            requestedPoster,
+            requestDate: new Date().toISOString(),
+            requestedBy: stand.reservedBy,
+            status: 'pending',
+            notes
+          }
+        ]
+      });
+      
+      toast.success('Demande de changement d\'affiche envoyée');
+    } catch (error) {
+      console.error('Erreur lors de la demande:', error);
+      toast.error('Erreur lors de la demande');
     }
   };
 
@@ -203,6 +318,43 @@ const PublicStandView = () => {
                         Jusqu'au: {format(new Date(stand.reservedUntil!), 'PPP', { locale: fr })}
                       </span>
                     </div>
+
+                    <div className="mt-6 space-y-3">
+                      <button
+                        onClick={() => setShowPosterRequestModal(true)}
+                        className="btn bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl w-full"
+                      >
+                        Demander un changement d'affiche
+                      </button>
+                      
+                      <button
+                        onClick={() => setShowStockModal(true)}
+                        className="btn bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl w-full"
+                      >
+                        Mettre à jour les stocks
+                      </button>
+
+                      <button
+                        onClick={() => setShowExtendModal(true)}
+                        className="btn bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 shadow-lg hover:shadow-xl w-full"
+                      >
+                        Prolonger la réservation
+                      </button>
+
+                      <button
+                        onClick={() => setShowUsageModal(true)}
+                        className="btn bg-gradient-to-r from-indigo-500 to-indigo-600 text-white hover:from-indigo-600 hover:to-indigo-700 shadow-lg hover:shadow-xl w-full"
+                      >
+                        Rapport d'utilisation
+                      </button>
+
+                      <button
+                        onClick={handleCancelReservation}
+                        className="btn bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl w-full"
+                      >
+                        Annuler la réservation
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="p-6 bg-green-50 rounded-lg border border-green-100">
@@ -227,7 +379,7 @@ const PublicStandView = () => {
                     <p className="text-yellow-700">
                       Certaines publications sont en stock limité
                     </p>
-                  </div>
+                   </div>
                 )}
               </div>
             </div>
@@ -235,7 +387,7 @@ const PublicStandView = () => {
         </div>
       </div>
 
-      {/* Modal de réservation */}
+      {/* Modals */}
       <Modal
         isOpen={showReservationModal}
         onClose={() => setShowReservationModal(false)}
@@ -311,6 +463,48 @@ const PublicStandView = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Stock Modal */}
+      {showStockModal && (
+        <PublicStockModal
+          stand={stand}
+          isOpen={showStockModal}
+          onClose={() => setShowStockModal(false)}
+          onUpdateStock={handleUpdateStock}
+          publications={publications}
+        />
+      )}
+
+      {/* Usage Report Modal */}
+      {showUsageModal && (
+        <UsageReportModal
+          stand={stand}
+          isOpen={showUsageModal}
+          onClose={() => setShowUsageModal(false)}
+          onSubmit={handleUsageReport}
+        />
+      )}
+
+      {/* Extend Reservation Modal */}
+      {showExtendModal && (
+        <ExtendReservationModal
+          currentEndDate={stand.reservedUntil!}
+          isOpen={showExtendModal}
+          onClose={() => setShowExtendModal(false)}
+          onExtend={handleExtendReservation}
+        />
+      )}
+
+      {/* Poster Request Modal */}
+      {showPosterRequestModal && (
+        <PublicPosterRequestModal
+          currentPoster={stand.currentPoster}
+          isOpen={showPosterRequestModal}
+          onClose={() => setShowPosterRequestModal(false)}
+          onSubmit={handlePosterRequest}
+          availablePosters={availablePosters}
+        />
+      )}
     </div>
   );
 };
