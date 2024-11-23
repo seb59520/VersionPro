@@ -5,9 +5,7 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { toast } from 'react-hot-toast';
 import Modal from './Modal';
-import PosterRequestModal from './PosterRequestModal';
-import PublicationStockModal from './PublicationStockModal';
-import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { DisplayStand, Publication, Poster } from '../types';
 
@@ -19,28 +17,83 @@ const PublicStandView = () => {
   const [availablePosters, setAvailablePosters] = useState<Poster[]>([]);
   const [loading, setLoading] = useState(true);
   const [showReservationModal, setShowReservationModal] = useState(false);
-  const [showPosterRequestModal, setShowPosterRequestModal] = useState(false);
-  const [showStockModal, setShowStockModal] = useState(false);
+  const [reservationData, setReservationData] = useState({
+    name: '',
+    startDate: '',
+    endDate: ''
+  });
 
   useEffect(() => {
     if (!id) return;
 
     // Charger les données du présentoir
     const standRef = doc(db, 'stands', id);
-    const unsubscribe = onSnapshot(standRef, (doc) => {
+    const unsubscribe = onSnapshot(standRef, async (doc) => {
       if (doc.exists()) {
-        setStand({ id: doc.id, ...doc.data() } as DisplayStand);
+        const standData = { id: doc.id, ...doc.data() } as DisplayStand;
+        setStand(standData);
+
+        // Charger les publications associées
+        if (standData.organizationId) {
+          const publicationsQuery = query(
+            collection(db, 'publications'),
+            where('organizationId', '==', standData.organizationId)
+          );
+          const publicationsSnapshot = await getDocs(publicationsQuery);
+          setPublications(publicationsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as Publication[]);
+
+          // Charger les affiches disponibles
+          const postersQuery = query(
+            collection(db, 'posters'),
+            where('organizationId', '==', standData.organizationId),
+            where('isActive', '==', true)
+          );
+          const postersSnapshot = await getDocs(postersQuery);
+          setAvailablePosters(postersSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as Poster[]);
+        }
       } else {
         setStand(null);
       }
-      setLoading(false);
-    }, (error) => {
-      console.error('Erreur lors du chargement du présentoir:', error);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [id]);
+
+  const handleReservation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stand) return;
+
+    try {
+      const standRef = doc(db, 'stands', stand.id);
+      await updateDoc(standRef, {
+        isReserved: true,
+        reservedBy: reservationData.name,
+        reservedUntil: new Date(reservationData.endDate).toISOString(),
+        lastUpdated: new Date().toISOString(),
+        reservationHistory: [
+          ...(stand.reservationHistory || []),
+          {
+            startDate: new Date(reservationData.startDate).toISOString(),
+            endDate: new Date(reservationData.endDate).toISOString(),
+            reservedBy: reservationData.name
+          }
+        ]
+      });
+      
+      setShowReservationModal(false);
+      toast.success('Réservation effectuée avec succès');
+    } catch (error) {
+      console.error('Erreur lors de la réservation:', error);
+      toast.error('Erreur lors de la réservation');
+    }
+  };
 
   if (loading) {
     return (
@@ -71,76 +124,6 @@ const PublicStandView = () => {
       </div>
     );
   }
-
-  const handleReservation = async (data: any) => {
-    try {
-      const standRef = doc(db, 'stands', stand.id);
-      await updateDoc(standRef, {
-        isReserved: true,
-        reservedBy: data.name,
-        reservedUntil: new Date(data.endDate).toISOString(),
-        lastUpdated: serverTimestamp(),
-        reservationHistory: [
-          ...(stand.reservationHistory || []),
-          {
-            startDate: new Date(data.startDate).toISOString(),
-            endDate: new Date(data.endDate).toISOString(),
-            reservedBy: data.name
-          }
-        ]
-      });
-      
-      setShowReservationModal(false);
-      toast.success('Réservation effectuée avec succès');
-    } catch (error) {
-      console.error('Erreur lors de la réservation:', error);
-      toast.error('Erreur lors de la réservation');
-    }
-  };
-
-  const handlePosterRequest = async (requestedPoster: string, notes: string) => {
-    try {
-      const standRef = doc(db, 'stands', stand.id);
-      await updateDoc(standRef, {
-        posterRequests: [
-          ...(stand.posterRequests || []),
-          {
-            id: crypto.randomUUID(),
-            standId: stand.id,
-            requestedBy: stand.reservedBy!,
-            requestedPoster,
-            requestDate: new Date().toISOString(),
-            status: 'pending',
-            notes
-          }
-        ]
-      });
-      
-      setShowPosterRequestModal(false);
-      toast.success('Demande de changement d\'affiche envoyée');
-    } catch (error) {
-      console.error('Erreur lors de la demande:', error);
-      toast.error('Erreur lors de la demande');
-    }
-  };
-
-  const handleUpdateStock = async (publicationId: string, quantity: number) => {
-    try {
-      const standRef = doc(db, 'stands', stand.id);
-      await updateDoc(standRef, {
-        publications: (stand.publications || []).map(pub =>
-          pub.publicationId === publicationId
-            ? { ...pub, quantity, lastUpdated: new Date().toISOString() }
-            : pub
-        )
-      });
-      
-      toast.success('Stock mis à jour');
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour:', error);
-      toast.error('Erreur lors de la mise à jour');
-    }
-  };
 
   const hasLowStock = (stand.publications || []).some(pub => {
     const publication = publications.find(p => p.id === pub.publicationId);
@@ -220,22 +203,6 @@ const PublicStandView = () => {
                         Jusqu'au: {format(new Date(stand.reservedUntil!), 'PPP', { locale: fr })}
                       </span>
                     </div>
-
-                    <div className="mt-6 space-y-3">
-                      <button
-                        onClick={() => setShowPosterRequestModal(true)}
-                        className="btn bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl w-full"
-                      >
-                        Demander un changement d'affiche
-                      </button>
-                      
-                      <button
-                        onClick={() => setShowStockModal(true)}
-                        className="btn bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl w-full"
-                      >
-                        Mettre à jour les stocks
-                      </button>
-                    </div>
                   </div>
                 ) : (
                   <div className="p-6 bg-green-50 rounded-lg border border-green-100">
@@ -268,109 +235,82 @@ const PublicStandView = () => {
         </div>
       </div>
 
-      {/* Modals */}
-      {showReservationModal && (
-        <Modal
-          isOpen={showReservationModal}
-          onClose={() => setShowReservationModal(false)}
-          title="Réserver le présentoir"
-        >
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            const formData = new FormData(e.currentTarget);
-            handleReservation({
-              name: formData.get('name'),
-              startDate: formData.get('startDate'),
-              endDate: formData.get('endDate')
-            });
-          }} className="space-y-6">
+      {/* Modal de réservation */}
+      <Modal
+        isOpen={showReservationModal}
+        onClose={() => setShowReservationModal(false)}
+        title="Réserver le présentoir"
+      >
+        <form onSubmit={handleReservation} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Votre nom
+            </label>
+            <input
+              type="text"
+              required
+              className="input"
+              value={reservationData.name}
+              onChange={(e) => setReservationData({ ...reservationData, name: e.target.value })}
+              placeholder="Entrez votre nom"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Votre nom
+                Date de début
               </label>
               <input
-                type="text"
-                name="name"
+                type="date"
                 required
                 className="input"
-                placeholder="Entrez votre nom"
+                value={reservationData.startDate}
+                onChange={(e) => setReservationData({ ...reservationData, startDate: e.target.value })}
+                min={format(new Date(), 'yyyy-MM-dd')}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date de début
-                </label>
-                <input
-                  type="date"
-                  name="startDate"
-                  required
-                  min={format(new Date(), 'yyyy-MM-dd')}
-                  className="input"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date de fin
-                </label>
-                <input
-                  type="date"
-                  name="endDate"
-                  required
-                  min={format(new Date(), 'yyyy-MM-dd')}
-                  className="input"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date de fin
+              </label>
+              <input
+                type="date"
+                required
+                className="input"
+                value={reservationData.endDate}
+                onChange={(e) => setReservationData({ ...reservationData, endDate: e.target.value })}
+                min={reservationData.startDate || format(new Date(), 'yyyy-MM-dd')}
+              />
             </div>
+          </div>
 
-            <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-700">
-              <ul className="space-y-1">
-                <li>• Durée maximale de réservation : 30 jours</li>
-                <li>• La réservation commence le lendemain</li>
-                <li>• Vous recevrez une confirmation par email</li>
-              </ul>
-            </div>
+          <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-700">
+            <ul className="space-y-1">
+              <li>• Durée maximale de réservation : 30 jours</li>
+              <li>• La réservation commence le lendemain</li>
+              <li>• Vous recevrez une confirmation par email</li>
+            </ul>
+          </div>
 
-            <div className="flex justify-end space-x-3 pt-4">
-              <button
-                type="button"
-                onClick={() => setShowReservationModal(false)}
-                className="btn btn-secondary"
-              >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-              >
-                Confirmer la réservation
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {showPosterRequestModal && (
-        <PosterRequestModal
-          stand={stand}
-          isOpen={true}
-          onClose={() => setShowPosterRequestModal(false)}
-          onSubmit={handlePosterRequest}
-          availablePosters={availablePosters}
-        />
-      )}
-
-      {showStockModal && (
-        <PublicationStockModal
-          stand={stand}
-          isOpen={true}
-          onClose={() => setShowStockModal(false)}
-          onUpdateStock={handleUpdateStock}
-          publications={publications}
-        />
-      )}
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setShowReservationModal(false)}
+              className="btn btn-secondary"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary"
+            >
+              Confirmer la réservation
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
