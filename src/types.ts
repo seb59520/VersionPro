@@ -34,15 +34,6 @@ export interface OrganizationSettings {
   };
 }
 
-export interface User {
-  id: string;
-  email: string;
-  displayName?: string;
-  organizationId: string;
-  role: 'admin' | 'user';
-  createdAt: string;
-}
-
 export interface DisplayStand {
   id: string;
   name: string;
@@ -119,10 +110,4 @@ export interface UsageReport {
   date: string;
   visitorsCount: number;
   usageHours: number;
-}
-
-export interface ReservationFormData {
-  name: string;
-  startDate: Date;
-  endDate: Date;
 }

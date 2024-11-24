@@ -32,7 +32,6 @@ const PosterRequestModal: React.FC<PosterRequestModalProps> = ({
 
     onSubmit(stand.id, selectedPoster, notes);
     onClose();
-    toast.success('Demande de changement d\'affiche envoyée');
   };
 
   return (
@@ -62,7 +61,7 @@ const PosterRequestModal: React.FC<PosterRequestModalProps> = ({
           >
             <option value="">Sélectionnez une affiche</option>
             {availablePosters.map((poster) => (
-              <option key={poster.id} value={poster.id}>
+              <option key={poster.id} value={poster.name}>
                 {poster.name}
               </option>
             ))}

@@ -1,118 +1,193 @@
-import React, { useState, useEffect } from 'react';
-import { useStands } from '../context/StandsContext';
+import React from 'react';
 import { useOrganization } from '../context/OrganizationContext';
+import { updateOrganization } from '../lib/organization';
 import { toast } from 'react-hot-toast';
-import { debounce } from '../utils/debounce';
+import { Building2, LayoutDashboard, FileText, BookOpen, Bell, User, Wrench } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/Tabs';
 import PosterSettings from './settings/PosterSettings';
 import PublicationSettings from './settings/PublicationSettings';
 import StandSettings from './settings/StandSettings';
-import UserProfileSettings from './UserProfileSettings';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import MaintenanceSettings from './settings/MaintenanceSettings';
+import NotificationSettings from './settings/NotificationSettings';
+import UserProfileSettings from './settings/UserProfileSettings';
 
-const Settings: React.FC = () => {
+const Settings = () => {
   const { currentOrganization, setCurrentOrganization } = useOrganization();
-  const [baseUrl, setBaseUrl] = useState(currentOrganization?.settings?.baseUrl || `${window.location.origin}/stand/`);
+  
+  const handleUpdate = async (field: string, value: string) => {
+    if (!currentOrganization) return;
 
-  useEffect(() => {
-    // Update baseUrl when organization changes
-    if (currentOrganization?.settings?.baseUrl) {
-      setBaseUrl(currentOrganization.settings.baseUrl);
+    try {
+      const updatedOrg = {
+        ...currentOrganization,
+        [field]: value,
+        updatedAt: new Date().toISOString()
+      };
+
+      await updateOrganization(currentOrganization.id, updatedOrg);
+      setCurrentOrganization(updatedOrg);
+      toast.success('Informations mises à jour avec succès');
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour:', error);
+      toast.error('Erreur lors de la mise à jour');
     }
-  }, [currentOrganization]);
-
-  // Debounced update function to prevent too many notifications
-  const handleSettingsUpdate = debounce(async (newSettings: any) => {
-    if (currentOrganization) {
-      try {
-        const updatedSettings = {
-          ...currentOrganization.settings,
-          ...newSettings
-        };
-
-        // Update Firestore
-        await updateDoc(doc(db, 'organizations', currentOrganization.id), {
-          settings: updatedSettings
-        });
-
-        // Update local state
-        setCurrentOrganization({
-          ...currentOrganization,
-          settings: updatedSettings
-        });
-
-        toast.success('Paramètres mis à jour avec succès');
-      } catch (error) {
-        console.error('Error updating settings:', error);
-        toast.error('Erreur lors de la mise à jour des paramètres');
-      }
-    }
-  }, 1000);
+  };
 
   return (
     <div className="max-w-4xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-4">
+          Paramètres de l'Organisation
+        </h1>
+
+        {currentOrganization && (
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center gap-3">
+            <Building2 className="h-5 w-5 text-blue-600" />
+            <div>
+              <h2 className="font-medium text-gray-900">{currentOrganization.name}</h2>
+              <div className="text-sm text-gray-600">
+                {currentOrganization.domain}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <Tabs defaultValue="general" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="general">Général</TabsTrigger>
-          <TabsTrigger value="organization">Organisation</TabsTrigger>
-          <TabsTrigger value="stands">Présentoirs</TabsTrigger>
-          <TabsTrigger value="posters">Affiches</TabsTrigger>
-          <TabsTrigger value="publications">Publications</TabsTrigger>
-          <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="profile">Profil</TabsTrigger>
+          <TabsTrigger value="general">
+            <LayoutDashboard className="h-4 w-4 mr-2" />
+            Général
+          </TabsTrigger>
+          <TabsTrigger value="stands">
+            <Building2 className="h-4 w-4 mr-2" />
+            Présentoirs
+          </TabsTrigger>
+          <TabsTrigger value="posters">
+            <FileText className="h-4 w-4 mr-2" />
+            Affiches
+          </TabsTrigger>
+          <TabsTrigger value="publications">
+            <BookOpen className="h-4 w-4 mr-2" />
+            Publications
+          </TabsTrigger>
+          <TabsTrigger value="maintenance">
+            <Wrench className="h-4 w-4 mr-2" />
+            Maintenance
+          </TabsTrigger>
+          <TabsTrigger value="notifications">
+            <Bell className="h-4 w-4 mr-2" />
+            Notifications
+          </TabsTrigger>
+          <TabsTrigger value="profile">
+            <User className="h-4 w-4 mr-2" />
+            Profil
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="general">
           <div className="card p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-6">
-              Paramètres généraux
+              Informations Générales
             </h2>
             
-            <form className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  URL de base
-                </label>
-                <input
-                  type="url"
-                  className="input"
-                  value={baseUrl}
-                  onChange={(e) => {
-                    setBaseUrl(e.target.value);
-                    handleSettingsUpdate({ baseUrl: e.target.value });
-                  }}
-                  placeholder="https://example.com/stand/"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+            <form className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Durée maximale de réservation (jours)
+                    Nom de l'organisation
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     className="input"
-                    value={currentOrganization?.settings?.maxReservationDays || 30}
-                    onChange={(e) => handleSettingsUpdate({ maxReservationDays: parseInt(e.target.value) })}
-                    min="1"
-                    max="90"
+                    value={currentOrganization?.name || ''}
+                    onChange={(e) => handleUpdate('name', e.target.value)}
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Délai minimum de réservation (heures)
+                    Domaine
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     className="input"
-                    value={currentOrganization?.settings?.minAdvanceHours || 24}
-                    onChange={(e) => handleSettingsUpdate({ minAdvanceHours: parseInt(e.target.value) })}
-                    min="0"
-                    max="72"
+                    value={currentOrganization?.domain || ''}
+                    onChange={(e) => handleUpdate('domain', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Adresse email
+                  </label>
+                  <input
+                    type="email"
+                    className="input"
+                    value={currentOrganization?.email || ''}
+                    onChange={(e) => handleUpdate('email', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Téléphone
+                  </label>
+                  <input
+                    type="tel"
+                    className="input"
+                    value={currentOrganization?.phone || ''}
+                    onChange={(e) => handleUpdate('phone', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Adresse
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={currentOrganization?.address || ''}
+                    onChange={(e) => handleUpdate('address', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Ville
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={currentOrganization?.city || ''}
+                    onChange={(e) => handleUpdate('city', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Code postal
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={currentOrganization?.postalCode || ''}
+                    onChange={(e) => handleUpdate('postalCode', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pays
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={currentOrganization?.country || ''}
+                    onChange={(e) => handleUpdate('country', e.target.value)}
                   />
                 </div>
               </div>
@@ -120,8 +195,29 @@ const Settings: React.FC = () => {
           </div>
         </TabsContent>
 
-        {/* Rest of the component remains the same */}
-        {/* ... */}
+        <TabsContent value="stands">
+          <StandSettings />
+        </TabsContent>
+
+        <TabsContent value="posters">
+          <PosterSettings />
+        </TabsContent>
+
+        <TabsContent value="publications">
+          <PublicationSettings />
+        </TabsContent>
+
+        <TabsContent value="maintenance">
+          <MaintenanceSettings />
+        </TabsContent>
+
+        <TabsContent value="notifications">
+          <NotificationSettings />
+        </TabsContent>
+
+        <TabsContent value="profile">
+          <UserProfileSettings />
+        </TabsContent>
       </Tabs>
     </div>
   );

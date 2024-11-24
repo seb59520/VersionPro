@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LayoutDashboard, BarChart2, Settings as SettingsIcon, Wrench, Building2 } from 'lucide-react';
 import { useStands } from '../context/StandsContext';
@@ -8,11 +8,13 @@ import StandList from './StandList';
 import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 const Dashboard: React.FC = () => {
   const { currentUser } = useAuth();
   const { currentOrganization } = useOrganization();
-  const { stands, setStands, publications } = useStands();
+  const { stands, publications } = useStands();
 
   // Function to check low stock publications
   const getLowStockPublications = (standId: string) => {
@@ -46,6 +48,92 @@ const Dashboard: React.FC = () => {
       nextMaintenance.setMonth(nextMaintenance.getMonth() + 3);
       return new Date() > nextMaintenance;
     }).length
+  };
+
+  const handleReserve = async (standId: string, data: any) => {
+    try {
+      const standRef = doc(db, 'stands', standId);
+      await updateDoc(standRef, {
+        isReserved: true,
+        reservedBy: data.name,
+        reservedUntil: data.endDate.toISOString(),
+        lastUpdated: new Date().toISOString(),
+        reservationHistory: [
+          ...(stands.find(s => s.id === standId)?.reservationHistory || []),
+          {
+            startDate: data.startDate.toISOString(),
+            endDate: data.endDate.toISOString(),
+            reservedBy: data.name
+          }
+        ]
+      });
+      toast.success('Réservation effectuée avec succès');
+    } catch (error) {
+      console.error('Erreur lors de la réservation:', error);
+      toast.error('Erreur lors de la réservation');
+    }
+  };
+
+  const handleCancelReservation = async (standId: string) => {
+    try {
+      const standRef = doc(db, 'stands', standId);
+      await updateDoc(standRef, {
+        isReserved: false,
+        reservedBy: null,
+        reservedUntil: null,
+        lastUpdated: new Date().toISOString()
+      });
+      toast.success('Réservation annulée');
+    } catch (error) {
+      console.error('Erreur lors de l\'annulation:', error);
+      toast.error('Erreur lors de l\'annulation');
+    }
+  };
+
+  const handlePosterRequest = async (standId: string, requestedPoster: string, notes: string) => {
+    try {
+      const stand = stands.find(s => s.id === standId);
+      if (!stand) return;
+
+      const standRef = doc(db, 'stands', standId);
+      await updateDoc(standRef, {
+        posterRequests: [
+          ...(stand.posterRequests || []),
+          {
+            id: crypto.randomUUID(),
+            requestedPoster,
+            requestDate: new Date().toISOString(),
+            requestedBy: stand.reservedBy,
+            status: 'pending',
+            notes
+          }
+        ]
+      });
+      toast.success('Demande de changement d\'affiche envoyée');
+    } catch (error) {
+      console.error('Erreur lors de la demande:', error);
+      toast.error('Erreur lors de la demande');
+    }
+  };
+
+  const handleUpdateStock = async (standId: string, publicationId: string, quantity: number) => {
+    try {
+      const stand = stands.find(s => s.id === standId);
+      if (!stand) return;
+
+      const standRef = doc(db, 'stands', standId);
+      await updateDoc(standRef, {
+        publications: (stand.publications || []).map(pub =>
+          pub.publicationId === publicationId
+            ? { ...pub, quantity, lastUpdated: new Date().toISOString() }
+            : pub
+        )
+      });
+      toast.success('Stock mis à jour');
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour:', error);
+      toast.error('Erreur lors de la mise à jour');
+    }
   };
 
   return (
@@ -135,79 +223,14 @@ const Dashboard: React.FC = () => {
           <StandList 
             stands={stands}
             getLowStockPublications={getLowStockPublications}
-            onReserve={(standId, data) => {
-              setStands(prevStands => 
-                prevStands.map(stand => 
-                  stand.id === standId
-                    ? {
-                        ...stand,
-                        isReserved: true,
-                        reservedBy: data.name,
-                        reservedUntil: data.endDate.toISOString(),
-                        lastUpdated: new Date().toISOString()
-                      }
-                    : stand
-                )
-              );
-              toast.success('Réservation effectuée avec succès');
-            }}
-            onCancelReservation={(standId) => {
-              setStands(prevStands =>
-                prevStands.map(stand =>
-                  stand.id === standId
-                    ? {
-                        ...stand,
-                        isReserved: false,
-                        reservedBy: undefined,
-                        reservedUntil: undefined,
-                        lastUpdated: new Date().toISOString()
-                      }
-                    : stand
-                )
-              );
-              toast.success('Réservation annulée');
-            }}
-            onPosterRequest={(standId, requestedPoster, notes) => {
-              setStands(prevStands =>
-                prevStands.map(stand =>
-                  stand.id === standId
-                    ? {
-                        ...stand,
-                        posterRequests: [
-                          ...(stand.posterRequests || []),
-                          {
-                            id: crypto.randomUUID(),
-                            standId,
-                            requestedBy: stand.reservedBy!,
-                            requestedPoster,
-                            requestDate: new Date().toISOString(),
-                            status: 'pending',
-                            notes
-                          }
-                        ]
-                      }
-                    : stand
-                )
-              );
-              toast.success('Demande de changement d\'affiche envoyée');
-            }}
-            onUpdateStock={(standId, publicationId, quantity) => {
-              setStands(prevStands =>
-                prevStands.map(stand =>
-                  stand.id === standId
-                    ? {
-                        ...stand,
-                        publications: (stand.publications || []).map(pub =>
-                          pub.publicationId === publicationId
-                            ? { ...pub, quantity, lastUpdated: new Date().toISOString() }
-                            : pub
-                        )
-                      }
-                    : stand
-                )
-              );
-              toast.success('Stock mis à jour');
-            }}
+            onReserve={handleReserve}
+            onCancelReservation={handleCancelReservation}
+            onPosterRequest={handlePosterRequest}
+            onUpdateStock={handleUpdateStock}
+            availablePosters={[]}
+            publications={publications}
+            hoveredStandId={null}
+            setHoveredStandId={() => {}}
           />
         </div>
       </div>

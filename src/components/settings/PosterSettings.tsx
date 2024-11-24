@@ -1,14 +1,15 @@
-import React, { useState, useRef } from 'react';
-import { useStands } from '../../context/StandsContext';
+import React, { useState, useRef, useEffect } from 'react';
 import { useOrganization } from '../../context/OrganizationContext';
 import { Plus, Trash2, Upload, Image } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { createPoster, updatePoster, deletePoster } from '../../lib/db';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { Poster } from '../../types';
+import { uploadImage } from '../../lib/storage';
 
-const PosterSettings: React.FC = () => {
-  const { availablePosters, setAvailablePosters } = useStands();
+const PosterSettings = () => {
   const { currentOrganization } = useOrganization();
+  const [posters, setPosters] = useState<Poster[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPoster, setEditingPoster] = useState<Poster | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,6 +21,26 @@ const PosterSettings: React.FC = () => {
     imageUrl: '',
     category: ''
   });
+
+  useEffect(() => {
+    if (!currentOrganization?.id) return;
+
+    // Subscribe to posters collection
+    const postersQuery = query(
+      collection(db, 'posters'),
+      where('organizationId', '==', currentOrganization.id)
+    );
+
+    const unsubscribe = onSnapshot(postersQuery, (snapshot) => {
+      const postersData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Poster[];
+      setPosters(postersData);
+    });
+
+    return () => unsubscribe();
+  }, [currentOrganization?.id]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -33,7 +54,7 @@ const PosterSettings: React.FC = () => {
   };
 
   const handleAddPoster = async () => {
-    if (!newPoster.name) {
+    if (!currentOrganization?.id || !newPoster.name) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
     }
@@ -41,14 +62,21 @@ const PosterSettings: React.FC = () => {
     try {
       setLoading(true);
       const file = fileInputRef.current?.files?.[0];
-      
-      // Créer le poster dans Firestore
-      const poster = await createPoster({
-        ...newPoster,
-        organizationId: currentOrganization?.id || ''
-      }, file);
+      let imageUrl = newPoster.imageUrl;
 
-      setAvailablePosters(prev => [...prev, poster]);
+      if (file) {
+        imageUrl = await uploadImage(file, 'posters');
+      }
+
+      // Add poster to Firestore
+      await addDoc(collection(db, 'posters'), {
+        ...newPoster,
+        imageUrl,
+        isActive: true,
+        organizationId: currentOrganization.id,
+        createdAt: new Date().toISOString()
+      });
+
       setNewPoster({ name: '', description: '', imageUrl: '', category: '' });
       setPreviewImage(null);
       setShowAddModal(false);
@@ -67,12 +95,20 @@ const PosterSettings: React.FC = () => {
     try {
       setLoading(true);
       const file = fileInputRef.current?.files?.[0];
-      
-      await updatePoster(editingPoster.id, editingPoster, file);
+      let imageUrl = editingPoster.imageUrl;
 
-      setAvailablePosters(prev => prev.map(p => 
-        p.id === editingPoster.id ? editingPoster : p
-      ));
+      if (file) {
+        imageUrl = await uploadImage(file, 'posters');
+      }
+
+      // Update poster in Firestore
+      const posterRef = doc(db, 'posters', editingPoster.id);
+      await updateDoc(posterRef, {
+        ...editingPoster,
+        imageUrl,
+        updatedAt: new Date().toISOString()
+      });
+
       setEditingPoster(null);
       setPreviewImage(null);
       toast.success('Affiche mise à jour avec succès');
@@ -86,8 +122,8 @@ const PosterSettings: React.FC = () => {
 
   const handleRemovePoster = async (posterId: string) => {
     try {
-      await deletePoster(posterId);
-      setAvailablePosters(prev => prev.filter(p => p.id !== posterId));
+      // Delete poster from Firestore
+      await deleteDoc(doc(db, 'posters', posterId));
       toast.success('Affiche supprimée avec succès');
     } catch (error) {
       console.error('Erreur lors de la suppression:', error);
@@ -116,7 +152,7 @@ const PosterSettings: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {availablePosters.map(poster => (
+        {posters.map(poster => (
           <div key={poster.id} className="card p-4">
             <div className="flex gap-4">
               <div className="w-32 h-32 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
@@ -219,10 +255,10 @@ const PosterSettings: React.FC = () => {
                     Choisir une image
                   </button>
                 </div>
-                {previewImage && (
+                {(previewImage || editingPoster?.imageUrl || newPoster.imageUrl) && (
                   <div className="mt-4">
                     <img
-                      src={previewImage}
+                      src={previewImage || editingPoster?.imageUrl || newPoster.imageUrl}
                       alt="Aperçu"
                       className="max-h-48 rounded-lg object-contain"
                     />

@@ -49,7 +49,7 @@ export const TabsList: React.FC<TabsListProps> = ({ children, className = '' }) 
   );
 };
 
-export const TabsTrigger: React.FC<TabsTriggerProps> = ({ value, children }) => {
+export const TabsTrigger: React.FC<TabsTriggerProps> = ({ value, children, className = '' }) => {
   const { value: selectedValue, onChange } = React.useContext(TabsContext);
   const isSelected = value === selectedValue;
 
@@ -59,7 +59,7 @@ export const TabsTrigger: React.FC<TabsTriggerProps> = ({ value, children }) => 
         ${isSelected 
           ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5' 
           : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-gray-200'
-        }`}
+        } ${className}`}
       onClick={() => onChange(value)}
     >
       {children}

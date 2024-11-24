@@ -3,7 +3,6 @@ import { db } from './firebase';
 import { Organization } from '../types';
 import slugify from 'slugify';
 
-// Get organization by domain
 export const getOrganizationByDomain = async (domain: string): Promise<Organization | null> => {
   try {
     // First try exact domain match
@@ -27,7 +26,6 @@ export const getOrganizationByDomain = async (domain: string): Promise<Organizat
   }
 };
 
-// Get organization by slug
 export const getOrganizationBySlug = async (slug: string): Promise<Organization | null> => {
   try {
     const q = query(collection(db, 'organizations'), where('slug', '==', slug));
@@ -43,7 +41,6 @@ export const getOrganizationBySlug = async (slug: string): Promise<Organization 
   }
 };
 
-// Create new organization
 export const createOrganization = async (data: Partial<Organization>): Promise<string> => {
   try {
     const slug = slugify(data.name!, { lower: true, strict: true });
@@ -90,7 +87,6 @@ export const createOrganization = async (data: Partial<Organization>): Promise<s
   }
 };
 
-// Update organization
 export const updateOrganization = async (id: string, data: Partial<Organization>): Promise<void> => {
   try {
     // If domain is being updated, check if it's already in use
@@ -112,7 +108,6 @@ export const updateOrganization = async (id: string, data: Partial<Organization>
   }
 };
 
-// Get organization by ID
 export const getOrganizationById = async (id: string): Promise<Organization | null> => {
   try {
     const docRef = doc(db, 'organizations', id);
