@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStands } from '../context/StandsContext';
-import { useSettings } from '../context/SettingsContext';
+import { useOrganization } from '../context/OrganizationContext';
 import { format, addMonths, isBefore, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Wrench, AlertTriangle, Calendar, CheckCircle, Clock, Plus, Trash2, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
@@ -9,15 +9,20 @@ import MaintenanceList from './MaintenanceList';
 import { toast } from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 
+const DEFAULT_MAINTENANCE_INTERVAL = 3; // Default interval in months
+
 const MaintenanceDashboard = () => {
   const { stands, addMaintenance } = useStands();
-  const { settings } = useSettings();
+  const { currentOrganization } = useOrganization();
   const [maintenanceModalStand, setMaintenanceModalStand] = useState<any>(null);
   const [selectedType, setSelectedType] = useState<'all' | 'preventive' | 'curative'>('all');
   const [expandedStand, setExpandedStand] = useState<string | null>(null);
 
+  // Get maintenance interval from organization settings or use default
+  const maintenanceInterval = currentOrganization?.settings?.maintenance?.preventiveIntervalMonths || DEFAULT_MAINTENANCE_INTERVAL;
+
   const getNextMaintenanceDate = (lastMaintenance: Date) => {
-    return addMonths(new Date(lastMaintenance), settings.maintenance.preventiveIntervalMonths);
+    return addMonths(new Date(lastMaintenance), maintenanceInterval);
   };
 
   const needsMaintenance = (stand: any) => {
@@ -83,6 +88,18 @@ const MaintenanceDashboard = () => {
           Gérez les maintenances préventives et curatives des présentoirs
         </p>
       </div>
+
+      {/* Organization Info */}
+      {currentOrganization && (
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <span className="font-medium">Organisation:</span>
+            <span>{currentOrganization.name}</span>
+            <span className="text-gray-400">•</span>
+            <span>{currentOrganization.domain}</span>
+          </div>
+        </div>
+      )}
 
       {/* Statistiques */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

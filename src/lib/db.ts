@@ -1,135 +1,60 @@
+// Ajoutez ces fonctions pour gérer les posters dans Firestore
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
-import { 
-  collection, 
-  addDoc, 
-  doc, 
-  updateDoc, 
-  serverTimestamp,
-  deleteDoc
-} from 'firebase/firestore';
-import { DisplayStand, Maintenance, Poster, Publication } from '../types';
-import { auth } from './firebase';
+import { Poster } from '../types';
+import { uploadImage } from './storage';
 
-// Vérification de l'authentification
-const checkAuth = () => {
-  const user = auth.currentUser;
-  if (!user) throw new Error('User must be authenticated');
-  return user;
-};
-
-// Gestion des publications
-export const createPublication = async (data: Omit<Publication, 'id'>) => {
-  const user = checkAuth();
-  const publicationsRef = collection(db, 'publications');
-  
-  const publicationData = {
-    ...data,
-    organizationId: user.uid,
-    createdAt: serverTimestamp(),
-    isActive: true
-  };
-  
+export const createPoster = async (data: Omit<Poster, 'id'>, file?: File): Promise<Poster> => {
   try {
-    const docRef = await addDoc(publicationsRef, publicationData);
-    return { id: docRef.id, ...publicationData };
-  } catch (error) {
-    console.error('Erreur lors de la création de la publication:', error);
-    throw error;
-  }
-};
+    let imageUrl = data.imageUrl;
+    
+    // Si un fichier est fourni, uploadez-le d'abord
+    if (file) {
+      imageUrl = await uploadImage(file, 'posters');
+    }
 
-export const updatePublication = async (publicationId: string, data: Partial<Publication>) => {
-  checkAuth();
-  const publicationRef = doc(db, 'publications', publicationId);
-
-  try {
-    await updateDoc(publicationRef, {
+    const posterData = {
       ...data,
-      lastUpdated: serverTimestamp()
-    });
-  } catch (error) {
-    console.error('Erreur lors de la mise à jour de la publication:', error);
-    throw error;
-  }
-};
+      imageUrl,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      isActive: true
+    };
 
-export const deletePublication = async (publicationId: string) => {
-  checkAuth();
-  const publicationRef = doc(db, 'publications', publicationId);
-
-  try {
-    await deleteDoc(publicationRef);
-  } catch (error) {
-    console.error('Erreur lors de la suppression de la publication:', error);
-    throw error;
-  }
-};
-
-// Gestion des affiches
-export const createPoster = async (data: Omit<Poster, 'id'>) => {
-  const user = checkAuth();
-  const postersRef = collection(db, 'posters');
-  
-  const posterData = {
-    ...data,
-    organizationId: user.uid,
-    createdAt: serverTimestamp(),
-    isActive: true
-  };
-  
-  try {
-    const docRef = await addDoc(postersRef, posterData);
+    const docRef = await addDoc(collection(db, 'posters'), posterData);
     return { id: docRef.id, ...posterData };
   } catch (error) {
-    console.error('Erreur lors de la création de l\'affiche:', error);
+    console.error('Error creating poster:', error);
     throw error;
   }
 };
 
-export const updatePoster = async (posterId: string, data: Partial<Poster>) => {
-  checkAuth();
-  const posterRef = doc(db, 'posters', posterId);
-
+export const updatePoster = async (id: string, data: Partial<Poster>, file?: File): Promise<void> => {
   try {
+    let imageUrl = data.imageUrl;
+    
+    // Si un fichier est fourni, uploadez-le d'abord
+    if (file) {
+      imageUrl = await uploadImage(file, 'posters');
+    }
+
+    const posterRef = doc(db, 'posters', id);
     await updateDoc(posterRef, {
       ...data,
-      lastUpdated: serverTimestamp()
+      ...(imageUrl && { imageUrl }),
+      updatedAt: serverTimestamp()
     });
   } catch (error) {
-    console.error('Erreur lors de la mise à jour de l\'affiche:', error);
+    console.error('Error updating poster:', error);
     throw error;
   }
 };
 
-export const deletePoster = async (posterId: string) => {
-  checkAuth();
-  const posterRef = doc(db, 'posters', posterId);
-
+export const deletePoster = async (id: string): Promise<void> => {
   try {
-    await deleteDoc(posterRef);
+    await deleteDoc(doc(db, 'posters', id));
   } catch (error) {
-    console.error('Erreur lors de la suppression de l\'affiche:', error);
-    throw error;
-  }
-};
-
-// Gestion des maintenances
-export const addMaintenance = async (standId: string, maintenance: Maintenance) => {
-  const user = checkAuth();
-  const maintenanceRef = collection(db, 'maintenance');
-  
-  const maintenanceData = {
-    ...maintenance,
-    standId,
-    organizationId: user.uid,
-    createdAt: serverTimestamp()
-  };
-
-  try {
-    const docRef = await addDoc(maintenanceRef, maintenanceData);
-    return { id: docRef.id, ...maintenanceData };
-  } catch (error) {
-    console.error('Erreur lors de l\'ajout de la maintenance:', error);
+    console.error('Error deleting poster:', error);
     throw error;
   }
 };

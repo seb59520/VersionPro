@@ -8,7 +8,7 @@ import ReservationModal from './ReservationModal';
 import PosterRequestModal from './PosterRequestModal';
 import PublicationStockModal from './PublicationStockModal';
 import MaintenanceModal from './MaintenanceModal';
-import { useSettings } from '../context/SettingsContext';
+import { useOrganization } from '../context/OrganizationContext';
 import { Link } from 'react-router-dom';
 import { getStandAge, getAgeStatus } from '../utils/standUtils';
 
@@ -43,7 +43,10 @@ const StandList: React.FC<StandListProps> = ({
   const [posterRequestStand, setPosterRequestStand] = useState<DisplayStand | null>(null);
   const [stockModalStand, setStockModalStand] = useState<DisplayStand | null>(null);
   const [maintenanceModalStand, setMaintenanceModalStand] = useState<any>(null);
-  const { settings } = useSettings();
+  const { currentOrganization } = useOrganization();
+
+  // Default base URL if organization settings are not available
+  const baseUrl = currentOrganization?.settings?.baseUrl || `${window.location.origin}/stand/`;
 
   return (
     <div className="card overflow-hidden bg-gradient-to-br from-white to-gray-50">
@@ -54,7 +57,7 @@ const StandList: React.FC<StandListProps> = ({
       <div className="divide-y divide-gray-100">
         {stands.map((stand) => {
           const hasLowStock = getLowStockPublications(stand.id).length > 0;
-          const publicUrl = `${settings.baseUrl}${stand.id}`;
+          const publicUrl = `${baseUrl}${stand.id}`;
           const age = getStandAge(stand.createdAt);
           const ageStatus = getAgeStatus(stand.createdAt);
           

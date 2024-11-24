@@ -3,18 +3,18 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { AuthProvider } from './context/AuthContext';
-import { SettingsProvider } from './context/SettingsContext';
+import { OrganizationProvider } from './context/OrganizationContext';
 import { StandsProvider } from './context/StandsContext';
-import './lib/firebase'; // Initialize Firebase first
+import './lib/firebase';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <SettingsProvider>
+      <OrganizationProvider>
         <StandsProvider>
           <App />
         </StandsProvider>
-      </SettingsProvider>
+      </OrganizationProvider>
     </AuthProvider>
   </StrictMode>
 );

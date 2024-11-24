@@ -2,12 +2,14 @@ import React from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, BarChart2, Settings as SettingsIcon, Wrench, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useOrganization } from '../context/OrganizationContext';
 import { toast } from 'react-hot-toast';
 
-const Layout = () => {
+const Layout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut } = useAuth();
+  const { currentOrganization } = useOrganization();
 
   const navigation = [
     { name: 'Tableau de bord', href: '/', icon: LayoutDashboard },
@@ -33,7 +35,7 @@ const Layout = () => {
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
                 <h1 className="text-xl font-bold text-gray-900">
-                  Gestion des Présentoirs
+                  {currentOrganization?.name || 'Gestion des Présentoirs'}
                 </h1>
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
@@ -58,7 +60,14 @@ const Layout = () => {
               </div>
             </div>
 
-            <div className="flex items-center">
+            <div className="flex items-center gap-6">
+              {currentOrganization?.domain && (
+                <div className="px-3 py-1 bg-gray-100 rounded-lg">
+                  <span className="text-sm text-gray-600">
+                    {currentOrganization.domain}
+                  </span>
+                </div>
+              )}
               <button
                 onClick={handleSignOut}
                 className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"

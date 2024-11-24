@@ -1,10 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { DisplayStand, Poster, Publication, Maintenance } from '../types';
-import { db } from '../lib/firebase';
+import { DisplayStand, Poster, Publication } from '../types';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 import { cacheManager } from '../lib/cache';
-import { createPublication, deletePublication, updatePublication } from '../lib/db';
 
 interface StandsContextType {
   stands: DisplayStand[];
@@ -13,12 +12,9 @@ interface StandsContextType {
   setAvailablePosters: React.Dispatch<React.SetStateAction<Poster[]>>;
   publications: Publication[];
   setPublications: React.Dispatch<React.SetStateAction<Publication[]>>;
-  addMaintenance: (standId: string, maintenance: Maintenance) => Promise<void>;
+  addMaintenance: (standId: string, maintenance: any) => Promise<void>;
   addStand: (standData: Omit<DisplayStand, 'id'>) => Promise<void>;
   removeStand: (standId: string) => Promise<void>;
-  addPublication: (data: Omit<Publication, 'id'>) => Promise<void>;
-  updatePublication: (id: string, data: Partial<Publication>) => Promise<void>;
-  removePublication: (id: string) => Promise<void>;
 }
 
 const StandsContext = createContext<StandsContextType | undefined>(undefined);
@@ -87,22 +83,7 @@ export const StandsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, [currentUser]);
 
-  const addPublication = async (data: Omit<Publication, 'id'>) => {
-    if (!currentUser) throw new Error('User must be authenticated');
-    await createPublication(data);
-  };
-
-  const updatePublicationData = async (id: string, data: Partial<Publication>) => {
-    if (!currentUser) throw new Error('User must be authenticated');
-    await updatePublication(id, data);
-  };
-
-  const removePublication = async (id: string) => {
-    if (!currentUser) throw new Error('User must be authenticated');
-    await deletePublication(id);
-  };
-
-  const addMaintenance = async (standId: string, maintenance: Maintenance) => {
+  const addMaintenance = async (standId: string, maintenance: any) => {
     if (!currentUser) throw new Error('User must be authenticated');
 
     const maintenanceData = {
@@ -158,21 +139,20 @@ export const StandsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const value = {
+    stands,
+    setStands,
+    availablePosters,
+    setAvailablePosters,
+    publications,
+    setPublications,
+    addMaintenance,
+    addStand,
+    removeStand
+  };
+
   return (
-    <StandsContext.Provider value={{ 
-      stands, 
-      setStands, 
-      availablePosters, 
-      setAvailablePosters,
-      publications,
-      setPublications,
-      addMaintenance,
-      addStand,
-      removeStand,
-      addPublication,
-      updatePublication: updatePublicationData,
-      removePublication
-    }}>
+    <StandsContext.Provider value={value}>
       {children}
     </StandsContext.Provider>
   );

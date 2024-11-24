@@ -1,82 +1,70 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Settings } from '../types';
+import { OrganizationSettings } from '../types';
 import { db } from '../lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
+import { useOrganization } from './OrganizationContext';
 import { preferencesManager } from '../lib/cache';
 
-const defaultSettings: Settings = {
-  baseUrl: window.location.origin + '/stand/',
-  maxReservationDays: 30,
-  minAdvanceHours: 24,
-  emailNotifications: {
-    newReservation: true,
-    posterRequest: true,
-    maintenance: true
-  },
-  maintenance: {
-    preventiveIntervalMonths: 3,
-    emailNotifications: true
-  },
-  assembly: {
-    name: '',
-    address: '',
-    city: '',
-    postalCode: '',
-    country: '',
-    phone: '',
-    email: ''
-  }
-};
-
 interface SettingsContextType {
-  settings: Settings;
-  updateSettings: (newSettings: Partial<Settings>) => Promise<void>;
+  settings: OrganizationSettings;
+  updateSettings: (newSettings: Partial<OrganizationSettings>) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [settings, setSettings] = useState<Settings>(defaultSettings);
   const { currentUser } = useAuth();
+  const { currentOrganization, setCurrentOrganization } = useOrganization();
+  const [settings, setSettings] = useState<OrganizationSettings>(currentOrganization?.settings || {
+    baseUrl: window.location.origin + '/stand/',
+    maxReservationDays: 30,
+    minAdvanceHours: 24,
+    emailNotifications: {
+      newReservation: true,
+      posterRequest: true,
+      maintenance: true
+    },
+    maintenance: {
+      preventiveIntervalMonths: 3,
+      emailNotifications: true
+    },
+    assembly: {
+      name: '',
+      address: '',
+      city: '',
+      postalCode: '',
+      country: '',
+      phone: '',
+      email: ''
+    }
+  });
 
   useEffect(() => {
-    if (!currentUser) {
-      setSettings(defaultSettings);
-      return;
+    if (currentOrganization) {
+      setSettings(currentOrganization.settings);
     }
+  }, [currentOrganization]);
 
-    // Subscribe to settings changes in Firestore
-    const unsubscribe = onSnapshot(
-      doc(db, 'settings', currentUser.uid),
-      (doc) => {
-        if (doc.exists()) {
-          setSettings(doc.data() as Settings);
-          // Cache settings locally
-          preferencesManager.setPreference('settings', doc.data());
-        }
-      },
-      async (error) => {
-        console.error('Error fetching settings:', error);
-        // Try to load from cache if Firestore fails
-        const cachedSettings = await preferencesManager.getPreference('settings');
-        if (cachedSettings) {
-          setSettings(cachedSettings as Settings);
-        }
-      }
-    );
-
-    return () => unsubscribe();
-  }, [currentUser]);
-
-  const updateSettings = async (newSettings: Partial<Settings>) => {
-    if (!currentUser) throw new Error('User must be authenticated');
-
-    const updatedSettings = { ...settings, ...newSettings };
-    setSettings(updatedSettings);
+  const updateSettings = async (newSettings: Partial<OrganizationSettings>) => {
+    if (!currentOrganization?.id) return;
 
     try {
-      await updateDoc(doc(db, 'settings', currentUser.uid), updatedSettings);
+      const updatedSettings = { ...settings, ...newSettings };
+      setSettings(updatedSettings);
+
+      // Update organization in Firestore
+      await updateDoc(doc(db, 'organizations', currentOrganization.id), {
+        settings: updatedSettings
+      });
+
+      // Update local organization state
+      setCurrentOrganization({
+        ...currentOrganization,
+        settings: updatedSettings
+      });
+
+      // Cache settings locally
       await preferencesManager.setPreference('settings', updatedSettings);
     } catch (error) {
       console.error('Error updating settings:', error);
@@ -98,5 +86,3 @@ export const useSettings = () => {
   }
   return context;
 };
-
-export default SettingsProvider;

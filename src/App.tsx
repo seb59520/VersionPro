@@ -39,11 +39,7 @@ const App: React.FC = () => {
             <Route index element={<Dashboard />} />
             <Route path="statistics" element={<Statistics />} />
             <Route path="maintenance" element={<MaintenanceDashboard />} />
-            <Route path="settings" element={
-              <AuthGuard requireAdmin>
-                <Settings />
-              </AuthGuard>
-            } />
+            <Route path="settings" element={<Settings />} />
             <Route path="details/:type" element={<StandDetails />} />
             <Route path="admin/stand/:id" element={<StandDetailPage />} />
           </Route>
