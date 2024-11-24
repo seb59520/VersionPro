@@ -12,69 +12,62 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin';
     }
     
-    function belongsToUser(organizationId) {
-      return isAuthenticated() && organizationId == request.auth.uid;
+    function belongsToOrganization(organizationId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == organizationId;
+    }
+
+    // Collection Organizations
+    match /organizations/{organizationId} {
+      allow read: if true; // Allow public read access for domain-based routing
+      allow create: if isAuthenticated();
+      allow update: if belongsToOrganization(organizationId) && isAdmin(request.auth.uid);
+      allow delete: if false;
     }
 
     // Collection Users
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId || 
+        belongsToOrganization(resource.data.organizationId)
+      );
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (
         request.auth.uid == userId || 
-        isAdmin(request.auth.uid)
+        (belongsToOrganization(resource.data.organizationId) && isAdmin(request.auth.uid))
       );
       allow delete: if isAdmin(request.auth.uid);
     }
 
     // Collection Stands
     match /stands/{standId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && belongsToUser(request.resource.data.organizationId);
-      allow update: if isAuthenticated() && belongsToUser(resource.data.organizationId);
-      allow delete: if isAuthenticated() && (
-        belongsToUser(resource.data.organizationId) || 
-        isAdmin(request.auth.uid)
-      );
-    }
-
-    // Collection Maintenance
-    match /maintenance/{maintenanceId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && belongsToUser(request.resource.data.organizationId);
-      allow update: if isAuthenticated() && belongsToUser(resource.data.organizationId);
-      allow delete: if isAuthenticated() && (
-        belongsToUser(resource.data.organizationId) || 
-        isAdmin(request.auth.uid)
-      );
+      allow read: if true;
+      allow create: if isAuthenticated() && belongsToOrganization(request.resource.data.organizationId);
+      allow update: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
+      allow delete: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
     }
 
     // Collection Publications
     match /publications/{publicationId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && belongsToUser(request.resource.data.organizationId);
-      allow update: if isAuthenticated() && belongsToUser(resource.data.organizationId);
-      allow delete: if isAuthenticated() && (
-        belongsToUser(resource.data.organizationId) || 
-        isAdmin(request.auth.uid)
-      );
+      allow read: if true;
+      allow create: if isAuthenticated() && belongsToOrganization(request.resource.data.organizationId);
+      allow update: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
+      allow delete: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
     }
 
     // Collection Posters
     match /posters/{posterId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && belongsToUser(request.resource.data.organizationId);
-      allow update: if isAuthenticated() && belongsToUser(resource.data.organizationId);
-      allow delete: if isAuthenticated() && (
-        belongsToUser(resource.data.organizationId) || 
-        isAdmin(request.auth.uid)
-      );
+      allow read: if true;
+      allow create: if isAuthenticated() && belongsToOrganization(request.resource.data.organizationId);
+      allow update: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
+      allow delete: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
     }
 
     // Collection Settings
-    match /settings/{userId} {
-      allow read: if isAuthenticated() && request.auth.uid == userId;
-      allow write: if isAuthenticated() && request.auth.uid == userId;
+    match /settings/{organizationId} {
+      allow read: if true;
+      allow write: if isAuthenticated() && belongsToOrganization(organizationId);
     }
   }
 }
