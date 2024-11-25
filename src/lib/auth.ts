@@ -5,7 +5,9 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   User,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -30,9 +32,32 @@ export const createUser = async (email: string, password: string, role: 'admin' 
   return userCredential.user;
 };
 
-// Connexion utilisateur
+// Connexion utilisateur avec email/mot de passe
 export const signIn = async (email: string, password: string) => {
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  return userCredential.user;
+};
+
+// Connexion avec Google
+export const signInWithGoogle = async () => {
+  const provider = new GoogleAuthProvider();
+  const userCredential = await signInWithPopup(auth, provider);
+  
+  // Vérifier si l'utilisateur existe déjà dans Firestore
+  const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+  
+  // Si l'utilisateur n'existe pas, créer son profil
+  if (!userDoc.exists()) {
+    await setDoc(doc(db, 'users', userCredential.user.uid), {
+      email: userCredential.user.email,
+      role: 'user',
+      createdAt: new Date().toISOString(),
+      permissions: ['read'],
+      displayName: userCredential.user.displayName,
+      photoURL: userCredential.user.photoURL
+    });
+  }
+
   return userCredential.user;
 };
 

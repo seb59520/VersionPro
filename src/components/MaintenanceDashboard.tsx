@@ -8,10 +8,10 @@ import MaintenanceModal from './MaintenanceModal';
 import MaintenanceList from './MaintenanceList';
 import { toast } from 'react-hot-toast';
 import { Link } from 'react-router-dom';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
-const DEFAULT_MAINTENANCE_INTERVAL = 3; // Default interval in months
-
-const MaintenanceDashboard = () => {
+const MaintenanceDashboard: React.FC = () => {
   const { stands, addMaintenance } = useStands();
   const { currentOrganization } = useOrganization();
   const [maintenanceModalStand, setMaintenanceModalStand] = useState<any>(null);
@@ -19,7 +19,7 @@ const MaintenanceDashboard = () => {
   const [expandedStand, setExpandedStand] = useState<string | null>(null);
 
   // Get maintenance interval from organization settings or use default
-  const maintenanceInterval = currentOrganization?.settings?.maintenance?.preventiveIntervalMonths || DEFAULT_MAINTENANCE_INTERVAL;
+  const maintenanceInterval = currentOrganization?.settings?.maintenance?.preventiveIntervalMonths || 3;
 
   const getNextMaintenanceDate = (lastMaintenance: Date) => {
     return addMonths(new Date(lastMaintenance), maintenanceInterval);
@@ -31,7 +31,7 @@ const MaintenanceDashboard = () => {
     return isBefore(nextMaintenance, new Date());
   };
 
-  // Calcul des statistiques de maintenance
+  // Calculer les statistiques de maintenance
   const maintenanceStats = {
     total: stands.reduce((acc, stand) => acc + (stand.maintenanceHistory?.length || 0), 0),
     preventive: stands.reduce((acc, stand) => 
@@ -40,6 +40,9 @@ const MaintenanceDashboard = () => {
       acc + (stand.maintenanceHistory?.filter(m => m.type === 'curative').length || 0), 0),
     upcoming: stands.filter(stand => needsMaintenance(stand)).length,
     averageTimeBetweenFailures: calculateAverageTimeBetweenFailures(),
+    pendingRequests: stands.reduce((acc, stand) => 
+      acc + (stand.maintenanceHistory?.filter(m => m.status === 'pending').length || 0), 0
+    )
   };
 
   function calculateAverageTimeBetweenFailures() {
@@ -63,19 +66,46 @@ const MaintenanceDashboard = () => {
     return count > 0 ? Math.round(totalDays / count) : 0;
   }
 
-  const calculateFailurePrediction = (stand: any) => {
-    const age = differenceInDays(new Date(), new Date(stand.createdAt || Date.now()));
-    const usageDays = (stand.reservationHistory || []).reduce((acc: number, res: any) => 
-      acc + differenceInDays(new Date(res.endDate), new Date(res.startDate)), 0);
-    const maintenanceCount = stand.maintenanceHistory?.length || 0;
-    const curativeCount = stand.maintenanceHistory?.filter((m: any) => m.type === 'curative').length || 0;
+  const handleApproveRequest = async (maintenanceId: string, standId: string) => {
+    const stand = stands.find(s => s.id === standId);
+    if (!stand) return;
 
-    const ageRisk = Math.min(age / 365, 1) * 0.3;
-    const usageRisk = Math.min(usageDays / 180, 1) * 0.4;
-    const maintenanceRisk = Math.min(curativeCount / 5, 1) * 0.3;
+    try {
+      const standRef = doc(db, 'stands', standId);
+      await updateDoc(standRef, {
+        maintenanceHistory: stand.maintenanceHistory?.map(m => 
+          m.id === maintenanceId
+            ? { ...m, status: 'approved', completedAt: new Date().toISOString() }
+            : m
+        ),
+        lastUpdated: serverTimestamp()
+      });
+      toast.success('Maintenance approuvée');
+    } catch (error) {
+      console.error('Error approving maintenance:', error);
+      toast.error('Erreur lors de l\'approbation');
+    }
+  };
 
-    const totalRisk = (ageRisk + usageRisk + maintenanceRisk) * 100;
-    return Math.min(Math.round(totalRisk), 100);
+  const handleRejectRequest = async (maintenanceId: string, standId: string) => {
+    const stand = stands.find(s => s.id === standId);
+    if (!stand) return;
+
+    try {
+      const standRef = doc(db, 'stands', standId);
+      await updateDoc(standRef, {
+        maintenanceHistory: stand.maintenanceHistory?.map(m => 
+          m.id === maintenanceId
+            ? { ...m, status: 'rejected', completedAt: new Date().toISOString() }
+            : m
+        ),
+        lastUpdated: serverTimestamp()
+      });
+      toast.success('Maintenance rejetée');
+    } catch (error) {
+      console.error('Error rejecting maintenance:', error);
+      toast.error('Erreur lors du rejet');
+    }
   };
 
   return (
@@ -103,10 +133,7 @@ const MaintenanceDashboard = () => {
 
       {/* Statistiques */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Link 
-          to="/maintenance/all"
-          className="card p-6 hover:scale-[1.02] transition-all duration-200 cursor-pointer bg-gradient-to-br from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200"
-        >
+        <div className="card p-6 bg-gradient-to-br from-blue-50 to-blue-100">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-blue-500 text-white rounded-lg shadow-lg">
               <Wrench className="h-6 w-6" />
@@ -116,12 +143,9 @@ const MaintenanceDashboard = () => {
               <p className="text-2xl font-bold text-blue-900">{maintenanceStats.total}</p>
             </div>
           </div>
-        </Link>
+        </div>
 
-        <Link 
-          to="/maintenance/preventive"
-          className="card p-6 hover:scale-[1.02] transition-all duration-200 cursor-pointer bg-gradient-to-br from-green-50 to-green-100 hover:from-green-100 hover:to-green-200"
-        >
+        <div className="card p-6 bg-gradient-to-br from-green-50 to-green-100">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-green-500 text-white rounded-lg shadow-lg">
               <CheckCircle className="h-6 w-6" />
@@ -131,12 +155,9 @@ const MaintenanceDashboard = () => {
               <p className="text-2xl font-bold text-green-900">{maintenanceStats.preventive}</p>
             </div>
           </div>
-        </Link>
+        </div>
 
-        <Link 
-          to="/maintenance/curative"
-          className="card p-6 hover:scale-[1.02] transition-all duration-200 cursor-pointer bg-gradient-to-br from-yellow-50 to-yellow-100 hover:from-yellow-100 hover:to-yellow-200"
-        >
+        <div className="card p-6 bg-gradient-to-br from-yellow-50 to-yellow-100">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-yellow-500 text-white rounded-lg shadow-lg">
               <AlertTriangle className="h-6 w-6" />
@@ -144,9 +165,14 @@ const MaintenanceDashboard = () => {
             <div>
               <p className="text-sm font-medium text-yellow-800">Maintenances curatives</p>
               <p className="text-2xl font-bold text-yellow-900">{maintenanceStats.curative}</p>
+              {maintenanceStats.pendingRequests > 0 && (
+                <span className="px-2.5 py-1 bg-yellow-200 text-yellow-800 rounded-full text-xs font-medium mt-2 inline-block">
+                  {maintenanceStats.pendingRequests} en attente
+                </span>
+              )}
             </div>
           </div>
-        </Link>
+        </div>
 
         <div className="card p-6 bg-gradient-to-br from-purple-50 to-purple-100">
           <div className="flex items-center gap-4">
@@ -164,8 +190,8 @@ const MaintenanceDashboard = () => {
       {/* Liste des présentoirs avec historique */}
       <div className="space-y-6">
         {stands.map((stand) => {
-          const failureRisk = calculateFailurePrediction(stand);
           const isExpanded = expandedStand === stand.id;
+          const pendingMaintenances = stand.maintenanceHistory?.filter(m => m.status === 'pending') || [];
           
           return (
             <div key={stand.id} className="card overflow-hidden border-2 hover:border-blue-200 transition-colors">
@@ -177,28 +203,15 @@ const MaintenanceDashboard = () => {
                   <div className="flex-1">
                     <div className="flex items-center gap-4">
                       <h3 className="text-lg font-semibold text-gray-900">{stand.name}</h3>
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex items-center">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center shadow-lg ${
-                            failureRisk > 50 
-                              ? 'bg-gradient-to-br from-red-500 to-red-600 text-white' 
-                              : 'bg-gradient-to-br from-green-500 to-green-600 text-white'
-                          }`}>
-                            <span className="text-sm font-bold">
-                              {failureRisk}%
-                            </span>
-                          </div>
-                          <div className="absolute -top-2 -right-2">
-                            <span className="px-1.5 py-0.5 text-[10px] font-bold text-purple-700 bg-purple-100 rounded-full shadow-sm">
-                              BETA
-                            </span>
-                          </div>
-                        </div>
-                        <span className="text-sm text-gray-600">Risque de panne</span>
-                      </div>
+                      {pendingMaintenances.length > 0 && (
+                        <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
+                          {pendingMaintenances.length} demande{pendingMaintenances.length > 1 ? 's' : ''} en attente
+                        </span>
+                      )}
                     </div>
                     <p className="text-gray-600 mt-1">{stand.location}</p>
                   </div>
+
                   <div className="flex items-center gap-4">
                     <button
                       onClick={(e) => {
@@ -231,6 +244,50 @@ const MaintenanceDashboard = () => {
 
               {isExpanded && (
                 <div className="border-t border-gray-100 p-6 bg-gradient-to-b from-blue-50 to-transparent">
+                  {/* Demandes en attente */}
+                  {pendingMaintenances.length > 0 && (
+                    <div className="mb-6 space-y-4">
+                      <h4 className="text-lg font-medium text-yellow-800">
+                        Demandes en attente
+                      </h4>
+                      {pendingMaintenances.map((maintenance) => (
+                        <div key={maintenance.id} className="card p-4 bg-yellow-50 border-2 border-yellow-200">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                                <h4 className="font-medium text-yellow-800">
+                                  Demande de maintenance en attente
+                                </h4>
+                              </div>
+                              <p className="text-sm text-yellow-700 mt-2">
+                                {maintenance.issues}
+                              </p>
+                              <p className="text-sm text-yellow-600 mt-1">
+                                Demandé par: {maintenance.requestedBy}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleApproveRequest(maintenance.id, stand.id)}
+                                className="btn btn-primary py-1 px-3"
+                              >
+                                Approuver
+                              </button>
+                              <button
+                                onClick={() => handleRejectRequest(maintenance.id, stand.id)}
+                                className="btn btn-secondary py-1 px-3"
+                              >
+                                Rejeter
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Historique des maintenances */}
                   <h4 className="text-lg font-medium text-gray-900 mb-4">
                     Historique des maintenances
                   </h4>

@@ -3,6 +3,7 @@ import { Organization } from '../types';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
+import { toast } from 'react-hot-toast';
 
 interface OrganizationContextType {
   currentOrganization: Organization | null;
@@ -36,6 +37,10 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
 
         const organizationId = userDoc.data().organizationId;
+        if (!organizationId) {
+          setLoading(false);
+          return;
+        }
 
         // Subscribe to organization document
         const unsubscribe = onSnapshot(

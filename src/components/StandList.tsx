@@ -1,20 +1,19 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { DisplayStand, ReservationFormData, Poster, Publication } from '../types';
-import { MapPin, Clock, User, FileText, AlertTriangle, BookOpen, ExternalLink, Wrench, Calendar } from 'lucide-react';
+import { DisplayStand, Publication, Poster } from '../types';
+import { MapPin, Clock, User, FileText, AlertTriangle, BookOpen, ExternalLink, Wrench, Calendar, Image, Plus } from 'lucide-react';
 import ReservationModal from './ReservationModal';
 import PosterRequestModal from './PosterRequestModal';
 import PublicationStockModal from './PublicationStockModal';
+import PublicationRequestModal from './PublicationRequestModal';
 import MaintenanceModal from './MaintenanceModal';
-import { useOrganization } from '../context/OrganizationContext';
-import { Link } from 'react-router-dom';
-import { getStandAge, getAgeStatus } from '../utils/standUtils';
 
 interface StandListProps {
   stands: DisplayStand[];
-  onReserve: (standId: string, data: ReservationFormData) => void;
+  onReserve: (standId: string, data: any) => void;
   onCancelReservation: (standId: string) => void;
   onPosterRequest: (standId: string, requestedPoster: string, notes: string) => void;
   onUpdateStock: (standId: string, publicationId: string, quantity: number) => void;
@@ -32,7 +31,7 @@ const StandList: React.FC<StandListProps> = ({
   onPosterRequest,
   onUpdateStock,
   availablePosters,
-  publications = [],
+  publications,
   hoveredStandId,
   setHoveredStandId,
   getLowStockPublications
@@ -41,16 +40,13 @@ const StandList: React.FC<StandListProps> = ({
   const [posterRequestStand, setPosterRequestStand] = useState<DisplayStand | null>(null);
   const [stockModalStand, setStockModalStand] = useState<DisplayStand | null>(null);
   const [maintenanceModalStand, setMaintenanceModalStand] = useState<any>(null);
-  const { currentOrganization } = useOrganization();
-
-  // Default base URL if organization settings are not available
-  const baseUrl = currentOrganization?.settings?.baseUrl || `${window.location.origin}/stand/`;
+  const [publicationModalStand, setPublicationModalStand] = useState<DisplayStand | null>(null);
 
   const formatDate = (dateString: string | Date | undefined) => {
     if (!dateString) return '';
     try {
       const date = new Date(dateString);
-      if (isNaN(date.getTime())) return '';
+      if (!isValid(date)) return '';
       return format(date, 'PPP', { locale: fr });
     } catch (error) {
       console.error('Error formatting date:', error);
@@ -65,11 +61,9 @@ const StandList: React.FC<StandListProps> = ({
       </div>
       
       <div className="divide-y divide-gray-100">
-        {stands.map((stand) => {
+        {stands.map(stand => {
           const hasLowStock = getLowStockPublications(stand.id).length > 0;
-          const publicUrl = `${baseUrl}${stand.id}`;
-          const age = getStandAge(stand.createdAt);
-          const ageStatus = getAgeStatus(stand.createdAt);
+          const posterImage = availablePosters.find(p => p.name === stand.currentPoster)?.imageUrl;
           
           return (
             <div key={stand.id} className="p-6 hover:bg-gray-50/50 transition-colors">
@@ -83,52 +77,22 @@ const StandList: React.FC<StandListProps> = ({
                       {stand.name}
                     </Link>
                     
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      stand.isReserved 
-                        ? 'bg-red-100/80 text-red-700 ring-1 ring-red-600/10' 
-                        : 'bg-green-100/80 text-green-700 ring-1 ring-green-600/10'
-                    }`}>
-                      {stand.isReserved ? 'Réservé' : 'Disponible'}
-                    </span>
-
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${
-                      ageStatus.status === 'old'
-                        ? 'bg-red-100 text-red-700'
-                        : ageStatus.status === 'aging'
-                        ? 'bg-yellow-100 text-yellow-700'
-                        : ageStatus.status === 'good'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-green-100 text-green-700'
-                    }`}>
-                      <Calendar className="h-4 w-4" />
-                      {age}
-                    </span>
-
-                    {hasLowStock && (
-                      <div className="relative">
-                        <span 
-                          className="px-3 py-1 rounded-full text-sm font-medium bg-yellow-100/80 text-yellow-700 ring-1 ring-yellow-600/10 flex items-center gap-1 cursor-help"
-                          onMouseEnter={() => setHoveredStandId(stand.id)}
-                          onMouseLeave={() => setHoveredStandId(null)}
-                        >
+                    <div className="flex items-center gap-2">
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        stand.isReserved 
+                          ? 'bg-red-100/80 text-red-700 ring-1 ring-red-600/10' 
+                          : 'bg-green-100/80 text-green-700 ring-1 ring-green-600/10'
+                      }`}>
+                        {stand.isReserved ? 'Réservé' : 'Disponible'}
+                      </span>
+                      
+                      {hasLowStock && (
+                        <span className="px-3 py-1 rounded-full text-sm font-medium bg-yellow-100/80 text-yellow-700 ring-1 ring-yellow-600/10 flex items-center gap-1">
                           <AlertTriangle className="h-4 w-4" />
-                          Stock publications bas
+                          Stock bas
                         </span>
-                        
-                        {hoveredStandId === stand.id && (
-                          <div className="absolute left-0 top-full mt-2 z-10 w-64 p-4 bg-white rounded-lg shadow-xl border border-gray-100">
-                            <h4 className="font-medium text-gray-900 mb-2">Publications à réapprovisionner :</h4>
-                            <ul className="space-y-2">
-                              {getLowStockPublications(stand.id).map((pub, idx) => (
-                                <li key={idx} className="text-sm text-gray-600">
-                                  {pub.title} ({pub.current}/{pub.required})
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
 
                   <div className="mt-4 space-y-3">
@@ -188,18 +152,32 @@ const StandList: React.FC<StandListProps> = ({
                         </div>
                       </div>
 
-                      {/* Groupe Stock */}
+                      {/* Groupe Publications */}
                       <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-4">
                         <h4 className="text-sm font-medium text-emerald-900 text-center mb-3">
-                          Stock
+                          Publications
                         </h4>
-                        <button
-                          onClick={() => setStockModalStand(stand)}
-                          className="btn bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700 shadow-md hover:shadow-lg w-full"
-                        >
-                          <BookOpen className="h-4 w-4" />
-                          Gérer le stock
-                        </button>
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={() => setPublicationModalStand(stand)}
+                            className="btn bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700 shadow-md hover:shadow-lg w-full"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Associer une publication
+                          </button>
+                          <button
+                            onClick={() => setStockModalStand(stand)}
+                            className={`btn bg-gradient-to-r from-emerald-400 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-600 shadow-md hover:shadow-lg w-full ${
+                              hasLowStock ? 'animate-pulse ring-2 ring-yellow-400' : ''
+                            }`}
+                          >
+                            <BookOpen className="h-4 w-4 mr-2" />
+                            Gérer le stock
+                            {hasLowStock && (
+                              <AlertTriangle className="h-4 w-4 ml-2 text-yellow-200" />
+                            )}
+                          </button>
+                        </div>
                       </div>
 
                       {/* Groupe Maintenance */}
@@ -212,14 +190,14 @@ const StandList: React.FC<StandListProps> = ({
                             onClick={() => setMaintenanceModalStand({ stand, type: 'preventive' })}
                             className="btn bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-md hover:shadow-lg w-full"
                           >
-                            <Wrench className="h-4 w-4" />
+                            <Wrench className="h-4 w-4 mr-2" />
                             Préventive
                           </button>
                           <button
                             onClick={() => setMaintenanceModalStand({ stand, type: 'curative' })}
                             className="btn bg-gradient-to-r from-amber-500 to-amber-600 text-white hover:from-amber-600 hover:to-amber-700 shadow-md hover:shadow-lg w-full"
                           >
-                            <AlertTriangle className="h-4 w-4" />
+                            <AlertTriangle className="h-4 w-4 mr-2" />
                             Curative
                           </button>
                         </div>
@@ -227,25 +205,39 @@ const StandList: React.FC<StandListProps> = ({
                     </div>
                   </div>
                 </div>
-                
-                <div className="flex flex-col items-center gap-3">
-                  <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
-                    <QRCodeSVG
-                      value={publicUrl}
-                      size={96}
-                      level="H"
-                      includeMargin={true}
-                    />
+
+                <div className="flex items-start gap-4">
+                  {posterImage ? (
+                    <div className="w-24 h-24 rounded-lg overflow-hidden border border-gray-200 bg-white flex items-center justify-center">
+                      <img
+                        src={posterImage}
+                        alt={stand.currentPoster}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center">
+                      <Image className="h-8 w-8 text-gray-400" />
+                    </div>
+                  )}
+                  
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                      <QRCodeSVG
+                        value={`${window.location.origin}/stand/${stand.id}`}
+                        size={96}
+                        level="H"
+                        includeMargin={true}
+                      />
+                    </div>
+                    <Link
+                      to={`/stand/${stand.id}`}
+                      className="btn btn-secondary inline-flex items-center text-sm px-3 py-1.5"
+                    >
+                      <ExternalLink className="h-4 w-4 mr-1.5" />
+                      Accéder à la page publique
+                    </Link>
                   </div>
-                  <a
-                    href={publicUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-secondary inline-flex items-center text-sm px-3 py-1.5"
-                  >
-                    <ExternalLink className="h-4 w-4 mr-1.5" />
-                    Accéder à la page publique
-                  </a>
                 </div>
               </div>
             </div>
@@ -253,6 +245,7 @@ const StandList: React.FC<StandListProps> = ({
         })}
       </div>
 
+      {/* Modals */}
       {selectedStand && (
         <ReservationModal
           stand={selectedStand}
@@ -282,13 +275,26 @@ const StandList: React.FC<StandListProps> = ({
         />
       )}
 
+      {publicationModalStand && (
+        <PublicationRequestModal
+          stand={publicationModalStand}
+          isOpen={true}
+          onClose={() => setPublicationModalStand(null)}
+          onSubmit={(standId, publicationId, data) => {
+            // Gérer l'association de publication ici
+            console.log('Association publication:', { standId, publicationId, data });
+          }}
+          publications={publications}
+        />
+      )}
+
       {maintenanceModalStand && (
         <MaintenanceModal
           stand={maintenanceModalStand.stand}
           type={maintenanceModalStand.type}
           isOpen={true}
           onClose={() => setMaintenanceModalStand(null)}
-          onSubmit={onSubmit}
+          onSubmit={onUpdateStock}
         />
       )}
     </div>

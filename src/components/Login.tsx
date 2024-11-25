@@ -3,6 +3,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Lock, Mail, AlertCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import OrganizationSelector from './OrganizationSelector';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { FcGoogle } from 'react-icons/fc';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -10,11 +14,17 @@ const Login = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { signIn, signUp } = useAuth();
+  const [showOrgSelector, setShowOrgSelector] = useState(false);
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const from = location.state?.from?.pathname || '/';
+
+  const checkUserOrganization = async (userId: string) => {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    return userDoc.exists() && userDoc.data().organizationId;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,14 +32,19 @@ const Login = () => {
     setLoading(true);
 
     try {
+      let user;
       if (isSignUp) {
-        await signUp(email, password);
-        toast.success('Compte créé avec succès');
+        user = await signUp(email, password);
+        setShowOrgSelector(true);
       } else {
-        await signIn(email, password);
-        toast.success('Connexion réussie');
+        user = await signIn(email, password);
+        const hasOrg = await checkUserOrganization(user.uid);
+        if (!hasOrg) {
+          setShowOrgSelector(true);
+        } else {
+          navigate(from, { replace: true });
+        }
       }
-      navigate(from, { replace: true });
     } catch (error: any) {
       let message = 'Erreur lors de l\'opération';
       switch (error.code) {
@@ -55,6 +70,35 @@ const Login = () => {
       setLoading(false);
     }
   };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setLoading(true);
+      const user = await signInWithGoogle();
+      const hasOrg = await checkUserOrganization(user.uid);
+      
+      if (!hasOrg) {
+        setShowOrgSelector(true);
+      } else {
+        navigate(from, { replace: true });
+      }
+    } catch (error: any) {
+      console.error('Google sign in error:', error);
+      toast.error('Erreur lors de la connexion avec Google');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (showOrgSelector) {
+    return (
+      <OrganizationSelector 
+        onComplete={() => {
+          navigate(from, { replace: true });
+        }} 
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -133,6 +177,25 @@ const Login = () => {
               ) : (
                 isSignUp ? 'Créer un compte' : 'Se connecter'
               )}
+            </button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">Ou continuer avec</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="btn btn-secondary w-full flex items-center justify-center gap-2"
+            >
+              <FcGoogle className="h-5 w-5" />
+              Google
             </button>
           </form>
 

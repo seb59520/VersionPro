@@ -5,6 +5,7 @@ import { Plus, Trash2, BookOpen } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { collection, addDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { PUBLICATION_CATEGORIES } from '../../constants/categories';
 
 const PublicationSettings = () => {
   const { currentOrganization } = useOrganization();
@@ -23,7 +24,6 @@ const PublicationSettings = () => {
   useEffect(() => {
     if (!currentUser?.uid || !currentOrganization?.id) return;
 
-    // Subscribe to publications collection
     const q = query(
       collection(db, 'publications'),
       where('organizationId', '==', currentOrganization.id)
@@ -53,7 +53,7 @@ const PublicationSettings = () => {
       return;
     }
 
-    if (!formData.title || !formData.imageUrl) {
+    if (!formData.title || !formData.category) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
     }
@@ -61,12 +61,10 @@ const PublicationSettings = () => {
     try {
       setLoading(true);
 
-      // Add publication to Firestore
       await addDoc(collection(db, 'publications'), {
         ...formData,
         isActive: true,
         organizationId: currentOrganization.id,
-        userId: currentUser.uid,
         createdAt: serverTimestamp()
       });
 
@@ -81,44 +79,11 @@ const PublicationSettings = () => {
       toast.success('Publication ajoutée avec succès');
     } catch (error) {
       console.error('Erreur lors de l\'ajout:', error);
-      let message = 'Erreur lors de l\'ajout de la publication';
-      if (error.code === 'permission-denied') {
-        message = 'Vous n\'avez pas les permissions nécessaires';
-      }
-      toast.error(message);
+      toast.error('Erreur lors de l\'ajout de la publication');
     } finally {
       setLoading(false);
     }
   };
-
-  const handleRemovePublication = async (publicationId) => {
-    if (!currentUser?.uid) {
-      toast.error('Vous devez être connecté');
-      return;
-    }
-
-    try {
-      await deleteDoc(doc(db, 'publications', publicationId));
-      toast.success('Publication supprimée avec succès');
-    } catch (error) {
-      console.error('Erreur lors de la suppression:', error);
-      let message = 'Erreur lors de la suppression';
-      if (error.code === 'permission-denied') {
-        message = 'Vous n\'avez pas les permissions nécessaires';
-      }
-      toast.error(message);
-    }
-  };
-
-  if (!currentUser?.uid) {
-    return (
-      <div className="card p-6">
-        <div className="text-center py-8">
-          <p className="text-gray-600">Veuillez vous connecter pour gérer les publications.</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="card p-6">
@@ -140,44 +105,53 @@ const PublicationSettings = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {publications.map(publication => (
-          <div key={publication.id} className="card p-4 bg-gray-50 border-2 border-gray-200">
-            <div className="flex gap-4">
-              <div className="w-24 h-24 rounded-lg overflow-hidden bg-white flex items-center justify-center">
-                {publication.imageUrl ? (
-                  <img
-                    src={publication.imageUrl}
-                    alt={publication.title}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <BookOpen className="h-8 w-8 text-gray-400" />
-                )}
-              </div>
-              <div className="flex-1">
-                <h3 className="font-medium text-gray-900">{publication.title}</h3>
-                <p className="text-sm text-gray-600 mt-1">{publication.description}</p>
-                <div className="mt-2 flex justify-between items-center">
-                  <div>
-                    <span className="text-sm font-medium text-gray-700 bg-white px-2 py-1 rounded-md shadow-sm">
-                      {publication.category}
-                    </span>
-                    <span className="text-sm text-gray-600 ml-4">
-                      Stock min: {publication.minStock}
-                    </span>
+      <div className="space-y-8">
+        {PUBLICATION_CATEGORIES.map((category) => {
+          const categoryPublications = publications.filter(p => p.category === category);
+          if (categoryPublications.length === 0) return null;
+
+          return (
+            <div key={category} className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                {category}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {categoryPublications.map((publication) => (
+                  <div key={publication.id} className="card p-4 bg-gray-50 border-2 border-gray-200">
+                    <div className="flex gap-4">
+                      <div className="w-24 h-24 rounded-lg overflow-hidden bg-white flex items-center justify-center">
+                        {publication.imageUrl ? (
+                          <img
+                            src={publication.imageUrl}
+                            alt={publication.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <BookOpen className="h-8 w-8 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-medium text-gray-900">{publication.title}</h3>
+                        <p className="text-sm text-gray-600 mt-1">{publication.description}</p>
+                        <div className="mt-2 flex justify-between items-center">
+                          <span className="text-sm text-gray-600">
+                            Stock minimum: {publication.minStock}
+                          </span>
+                          <button
+                            onClick={() => handleRemovePublication(publication.id)}
+                            className="text-red-600 hover:text-red-700 p-1 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleRemovePublication(publication.id)}
-                    className="text-red-600 hover:text-red-700 p-1 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                ))}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {showAddModal && (
@@ -215,14 +189,13 @@ const PublicationSettings = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  URL de l'image *
+                  URL de l'image
                 </label>
                 <input
                   type="url"
                   className="input bg-white"
                   value={formData.imageUrl}
                   onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                  required
                 />
               </div>
 
@@ -230,13 +203,19 @@ const PublicationSettings = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Catégorie *
                 </label>
-                <input
-                  type="text"
+                <select
                   className="input bg-white"
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   required
-                />
+                >
+                  <option value="">Sélectionnez une catégorie</option>
+                  {PUBLICATION_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -256,16 +235,7 @@ const PublicationSettings = () => {
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setFormData({
-                      title: '',
-                      description: '',
-                      imageUrl: '',
-                      category: '',
-                      minStock: 10
-                    });
-                  }}
+                  onClick={() => setShowAddModal(false)}
                   className="btn btn-secondary"
                 >
                   Annuler

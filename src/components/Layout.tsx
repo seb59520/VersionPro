@@ -183,14 +183,7 @@ const Layout: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-6">
-              {currentOrganization?.domain && (
-                <div className="px-3 py-1 bg-gray-100 rounded-lg">
-                  <span className="text-sm text-gray-600">
-                    {currentOrganization.domain}
-                  </span>
-                </div>
-              )}
+            <div className="flex items-center">
               <button
                 onClick={handleSignOut}
                 className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"

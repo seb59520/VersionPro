@@ -1,4 +1,4 @@
-import { differenceInMonths, differenceInYears, format } from 'date-fns';
+import { differenceInMonths, differenceInYears, format, isValid } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 export const getStandAge = (createdAt?: string | Date | null) => {
@@ -6,7 +6,7 @@ export const getStandAge = (createdAt?: string | Date | null) => {
   
   try {
     const date = new Date(createdAt);
-    if (isNaN(date.getTime())) return 'Date invalide';
+    if (!isValid(date)) return 'Date invalide';
 
     const years = differenceInYears(new Date(), date);
     const months = differenceInMonths(new Date(), date) % 12;
@@ -32,7 +32,7 @@ export const getAgeStatus = (createdAt?: string | Date | null) => {
 
   try {
     const date = new Date(createdAt);
-    if (isNaN(date.getTime())) {
+    if (!isValid(date)) {
       return {
         status: 'unknown',
         color: 'gray',
@@ -82,9 +82,9 @@ export const formatDate = (date?: string | Date | null) => {
   
   try {
     const parsedDate = new Date(date);
-    if (isNaN(parsedDate.getTime())) return 'Date invalide';
+    if (!isValid(parsedDate)) return 'Date invalide';
     
-    return format(parsedDate, 'PP', { locale: fr });
+    return format(parsedDate, 'PPP', { locale: fr });
   } catch (error) {
     console.error('Error formatting date:', error);
     return 'Date invalide';

@@ -8,8 +8,7 @@ export const initializeDatabase = async (userId: string, email: string) => {
     await setDoc(organizationRef, {
       name: 'Mon Organisation',
       domain: window.location.hostname,
-      userId: userId,
-      createdAt: serverTimestamp(),
+      createdAt: new Date(),
       settings: {
         baseUrl: `${window.location.origin}/stand/`,
         maxReservationDays: 30,
@@ -22,26 +21,18 @@ export const initializeDatabase = async (userId: string, email: string) => {
         maintenance: {
           preventiveIntervalMonths: 3,
           emailNotifications: true
-        },
-        assembly: {
-          name: '',
-          address: '',
-          city: '',
-          postalCode: '',
-          country: '',
-          phone: '',
-          email: ''
         }
       }
     });
 
-    // Create user profile with reference to organization
+    // Create user profile with reference to organization and admin role
     const userRef = doc(db, 'users', userId);
     await setDoc(userRef, {
       email,
       role: 'admin',
-      organizationId: userId, // Link user to organization
-      createdAt: serverTimestamp()
+      organizationId: userId,
+      createdAt: new Date(),
+      permissions: ['all']
     });
 
     // Create initial data
@@ -53,12 +44,11 @@ export const initializeDatabase = async (userId: string, email: string) => {
           currentPoster: 'Bienvenue',
           isReserved: false,
           organizationId: userId,
-          userId: userId,
           maintenanceHistory: [],
           posterRequests: [],
           publications: [],
-          createdAt: serverTimestamp(),
-          lastUpdated: serverTimestamp()
+          createdAt: new Date(),
+          lastUpdated: new Date()
         }
       ],
       posters: [
@@ -69,8 +59,7 @@ export const initializeDatabase = async (userId: string, email: string) => {
           category: 'Standard',
           isActive: true,
           organizationId: userId,
-          userId: userId,
-          createdAt: serverTimestamp()
+          createdAt: new Date()
         }
       ],
       publications: [
@@ -82,8 +71,7 @@ export const initializeDatabase = async (userId: string, email: string) => {
           isActive: true,
           minStock: 10,
           organizationId: userId,
-          userId: userId,
-          createdAt: serverTimestamp()
+          createdAt: new Date()
         }
       ]
     };
