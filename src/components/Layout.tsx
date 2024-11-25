@@ -12,7 +12,8 @@ import {
   FileText,
   BookOpen,
   Bell,
-  User
+  User,
+  HelpCircle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useOrganization } from '../context/OrganizationContext';
@@ -41,7 +42,8 @@ const Layout: React.FC = () => {
         { name: 'Notifications', href: '/settings/notifications', icon: Bell },
         { name: 'Profil', href: '/settings/profile', icon: User }
       ]
-    }
+    },
+    { name: 'Aide', href: '/help', icon: HelpCircle }
   ];
 
   const handleSignOut = async () => {

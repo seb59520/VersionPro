@@ -1,17 +1,19 @@
 import { 
   signInWithEmailAndPassword,
-  signOut,
+  signOut as firebaseSignOut,
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   User,
   sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   browserLocalPersistence,
   setPersistence
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db, googleProvider } from './firebase';
+import { auth, db } from './firebase';
 import { initializeDatabase } from './initDb';
 import { toast } from 'react-hot-toast';
 
@@ -21,9 +23,7 @@ export interface UserRole {
 }
 
 // Enable persistent auth state
-setPersistence(auth, browserLocalPersistence).catch((error) => {
-  console.error('Error setting persistence:', error);
-});
+setPersistence(auth, browserLocalPersistence);
 
 // Create a new user
 export const createUser = async (email: string, password: string, role: 'admin' | 'user' = 'user') => {
@@ -40,7 +40,7 @@ export const createUser = async (email: string, password: string, role: 'admin' 
     await initializeDatabase(userCredential.user.uid, email);
     return userCredential.user;
   } catch (error: any) {
-    console.error('Error creating user:', error);
+    handleAuthError(error);
     throw error;
   }
 };
@@ -51,49 +51,7 @@ export const signIn = async (email: string, password: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     return userCredential.user;
   } catch (error: any) {
-    console.error('Error signing in:', error);
-    throw error;
-  }
-};
-
-// Handle Google sign-in
-const handleGoogleUser = async (user: User) => {
-  try {
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    
-    if (!userDoc.exists()) {
-      await setDoc(doc(db, 'users', user.uid), {
-        email: user.email,
-        role: 'user',
-        createdAt: serverTimestamp(),
-        permissions: ['read'],
-        displayName: user.displayName,
-        photoURL: user.photoURL
-      });
-
-      await initializeDatabase(user.uid, user.email || '');
-    }
-
-    return user;
-  } catch (error) {
-    console.error('Error handling Google user:', error);
-    throw error;
-  }
-};
-
-// Sign in with Google using popup
-export const signInWithGoogle = async () => {
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    return await handleGoogleUser(result.user);
-  } catch (error: any) {
-    if (error.code === 'auth/popup-blocked') {
-      toast.error('Le navigateur a bloqué la fenêtre de connexion. Veuillez autoriser les popups.');
-    } else if (error.code === 'auth/unauthorized-domain') {
-      toast.error('Ce domaine n\'est pas autorisé pour la connexion Google.');
-    } else {
-      toast.error('Erreur lors de la connexion avec Google');
-    }
+    handleAuthError(error);
     throw error;
   }
 };
@@ -101,9 +59,9 @@ export const signInWithGoogle = async () => {
 // Sign out
 export const signOut = async () => {
   try {
-    await auth.signOut();
+    await firebaseSignOut(auth);
   } catch (error: any) {
-    console.error('Error signing out:', error);
+    handleAuthError(error);
     throw error;
   }
 };
@@ -112,8 +70,9 @@ export const signOut = async () => {
 export const resetPassword = async (email: string) => {
   try {
     await sendPasswordResetEmail(auth, email);
+    toast.success('Email de réinitialisation envoyé');
   } catch (error: any) {
-    console.error('Error resetting password:', error);
+    handleAuthError(error);
     throw error;
   }
 };
@@ -129,7 +88,7 @@ export const getUserRole = async (userId: string): Promise<UserRole | null> => {
       role: data.role,
       permissions: data.permissions || []
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error getting user role:', error);
     return null;
   }
@@ -145,4 +104,35 @@ export const isAdmin = async (user: User | null): Promise<boolean> => {
 // Subscribe to auth state changes
 export const subscribeToAuthChanges = (callback: (user: User | null) => void) => {
   return onAuthStateChanged(auth, callback);
+};
+
+// Handle authentication errors
+const handleAuthError = (error: any) => {
+  let message = 'Une erreur est survenue';
+  
+  switch (error.code) {
+    case 'auth/invalid-email':
+      message = 'Adresse email invalide';
+      break;
+    case 'auth/user-disabled':
+      message = 'Ce compte a été désactivé';
+      break;
+    case 'auth/user-not-found':
+      message = 'Aucun compte associé à cet email';
+      break;
+    case 'auth/wrong-password':
+      message = 'Email ou mot de passe incorrect';
+      break;
+    case 'auth/email-already-in-use':
+      message = 'Cette adresse email est déjà utilisée';
+      break;
+    case 'auth/weak-password':
+      message = 'Le mot de passe doit contenir au moins 6 caractères';
+      break;
+    case 'auth/too-many-requests':
+      message = 'Trop de tentatives. Veuillez réessayer plus tard.';
+      break;
+  }
+
+  toast.error(message);
 };

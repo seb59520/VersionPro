@@ -19,6 +19,7 @@ import StandDetails from './components/StandDetails';
 import MaintenanceDashboard from './components/MaintenanceDashboard';
 import StandDetailPage from './components/StandDetailPage';
 import Unauthorized from './components/Unauthorized';
+import HelpPage from './components/HelpPage';
 
 const App: React.FC = () => {
   return (
@@ -40,6 +41,7 @@ const App: React.FC = () => {
           <Route path="/login" element={<Login />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
           <Route path="/stand/:id" element={<PublicStandView />} />
+          <Route path="/help" element={<HelpPage />} />
           
           {/* Routes protégées */}
           <Route element={<AuthGuard><Layout /></AuthGuard>}>
@@ -48,7 +50,7 @@ const App: React.FC = () => {
             <Route path="maintenance" element={<MaintenanceDashboard />} />
             
             {/* Routes des paramètres */}
-            <Route path="settings" element={<GeneralSettings />} />
+            <Route path="settings" element={<Settings />} />
             <Route path="settings/stands" element={<StandSettings />} />
             <Route path="settings/posters" element={<PosterSettings />} />
             <Route path="settings/publications" element={<PublicationSettings />} />

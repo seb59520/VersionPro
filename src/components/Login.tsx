@@ -6,7 +6,6 @@ import { toast } from 'react-hot-toast';
 import OrganizationSelector from './OrganizationSelector';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { FcGoogle } from 'react-icons/fc';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -15,7 +14,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showOrgSelector, setShowOrgSelector] = useState(false);
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -45,45 +44,8 @@ const Login = () => {
           navigate(from, { replace: true });
         }
       }
-    } catch (error: any) {
-      let message = 'Erreur lors de l\'opération';
-      switch (error.code) {
-        case 'auth/invalid-email':
-          message = 'Adresse email invalide';
-          break;
-        case 'auth/user-disabled':
-          message = 'Ce compte a été désactivé';
-          break;
-        case 'auth/user-not-found':
-          message = 'Aucun compte associé à cet email';
-          break;
-        case 'auth/wrong-password':
-          message = 'Mot de passe incorrect';
-          break;
-        case 'auth/email-already-in-use':
-          message = 'Cette adresse email est déjà utilisée';
-          break;
-      }
-      setError(message);
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    try {
-      setLoading(true);
-      const user = await signInWithGoogle();
-      const hasOrg = await checkUserOrganization(user.uid);
-      
-      if (!hasOrg) {
-        setShowOrgSelector(true);
-      } else {
-        navigate(from, { replace: true });
-      }
-    } catch (error: any) {
-      console.error('Google sign in error:', error);
+    } catch (error) {
+      setError('Une erreur est survenue lors de la connexion');
     } finally {
       setLoading(false);
     }
@@ -176,25 +138,6 @@ const Login = () => {
               ) : (
                 isSignUp ? 'Créer un compte' : 'Se connecter'
               )}
-            </button>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Ou continuer avec</span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={loading}
-              className="btn btn-secondary w-full flex items-center justify-center gap-2"
-            >
-              <FcGoogle className="h-5 w-5" />
-              Google
             </button>
           </form>
 
