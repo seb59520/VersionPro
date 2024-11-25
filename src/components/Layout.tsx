@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useOrganization } from '../context/OrganizationContext';
 import { toast } from 'react-hot-toast';
+import NotificationBell from './NotificationBell';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -42,8 +43,7 @@ const Layout: React.FC = () => {
         { name: 'Notifications', href: '/settings/notifications', icon: Bell },
         { name: 'Profil', href: '/settings/profile', icon: User }
       ]
-    },
-    { name: 'Aide', href: '/help', icon: HelpCircle }
+    }
   ];
 
   const handleSignOut = async () => {
@@ -185,7 +185,15 @@ const Layout: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center">
+            <div className="flex items-center gap-4">
+              <Link
+                to="/help"
+                className="text-gray-600 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Aide"
+              >
+                <HelpCircle className="h-5 w-5" />
+              </Link>
+              <NotificationBell />
               <button
                 onClick={handleSignOut}
                 className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"

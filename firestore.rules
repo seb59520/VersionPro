@@ -20,7 +20,7 @@ service cloud.firestore {
 
     // Organizations collection
     match /organizations/{organizationId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (
         belongsToOrganization(organizationId) || isUserAdmin()
@@ -40,58 +40,42 @@ service cloud.firestore {
 
     // Stands collection
     match /stands/{standId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        belongsToOrganization(resource.data.organizationId) || isUserAdmin()
-      );
+      allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && isUserAdmin();
     }
 
     // Posters collection
     match /posters/{posterId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        belongsToOrganization(resource.data.organizationId) || isUserAdmin()
-      );
+      allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && isUserAdmin();
     }
 
     // Publications collection
     match /publications/{publicationId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        belongsToOrganization(resource.data.organizationId) || isUserAdmin()
-      );
+      allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && isUserAdmin();
     }
 
-    // Publication associations collection
-    match /publicationAssociations/{associationId} {
-      allow read: if true;
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        belongsToOrganization(resource.data.organizationId) || isUserAdmin()
-      );
+      allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && isUserAdmin();
     }
 
     // Maintenance collection
     match /maintenance/{maintenanceId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        belongsToOrganization(resource.data.organizationId) || isUserAdmin()
-      );
+      allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && isUserAdmin();
-    }
-
-    // Storage rules
-    match /storage/{allPaths=**} {
-      allow read: if true;
-      allow write: if isAuthenticated();
     }
   }
 }

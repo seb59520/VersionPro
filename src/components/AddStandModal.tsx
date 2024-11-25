@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
-import { useStands } from '../context/StandsContext';
 import { useAuth } from '../context/AuthContext';
-import { DisplayStand } from '../types';
+import { useOrganization } from '../context/OrganizationContext';
 import { toast } from 'react-hot-toast';
-import { Plus, Minus } from 'lucide-react';
-import { addDoc, collection } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { Poster } from '../types';
+import { Image } from 'lucide-react';
 
 interface AddStandModalProps {
   isOpen: boolean;
@@ -15,22 +15,47 @@ interface AddStandModalProps {
 
 const AddStandModal: React.FC<AddStandModalProps> = ({ isOpen, onClose }) => {
   const { currentUser } = useAuth();
-  const { availablePosters, publications } = useStands();
+  const { currentOrganization } = useOrganization();
+  const [loading, setLoading] = useState(false);
+  const [availablePosters, setAvailablePosters] = useState<Poster[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     location: '',
-    currentPoster: '',
+    currentPoster: ''
   });
 
-  const [selectedPublications, setSelectedPublications] = useState<Array<{
-    publicationId: string;
-    quantity: number;
-  }>>([]);
+  // Charger les affiches disponibles
+  useEffect(() => {
+    const loadPosters = async () => {
+      if (!currentOrganization?.id) return;
+
+      try {
+        const q = query(
+          collection(db, 'posters'),
+          where('organizationId', '==', currentOrganization.id),
+          where('isActive', '==', true)
+        );
+        
+        const snapshot = await getDocs(q);
+        const posters = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Poster[];
+        
+        setAvailablePosters(posters);
+      } catch (error) {
+        console.error('Error loading posters:', error);
+        toast.error('Erreur lors du chargement des affiches');
+      }
+    };
+
+    loadPosters();
+  }, [currentOrganization?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!currentUser) {
+    if (!currentUser || !currentOrganization) {
       toast.error('Vous devez être connecté');
       return;
     }
@@ -40,64 +65,37 @@ const AddStandModal: React.FC<AddStandModalProps> = ({ isOpen, onClose }) => {
       return;
     }
 
-    if (formData.location.trim().length < 2) {
-      toast.error('La localisation doit contenir au moins 2 caractères');
-      return;
-    }
-
     try {
-      // Créer le nouveau présentoir directement dans Firestore
-      const standData = {
-        name: formData.name,
-        location: formData.location,
-        currentPoster: formData.currentPoster,
-        isReserved: false,
-        lastUpdated: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        maintenanceHistory: [],
-        publications: selectedPublications,
-        posterRequests: [],
-        reservationHistory: [],
-        organizationId: currentUser.uid
-      };
+      setLoading(true);
 
-      const docRef = await addDoc(collection(db, 'stands'), standData);
-      
+      await addDoc(collection(db, 'stands'), {
+        ...formData,
+        organizationId: currentOrganization.id,
+        createdAt: serverTimestamp(),
+        lastUpdated: serverTimestamp(),
+        isReserved: false,
+        maintenanceHistory: [],
+        publications: [],
+        posterRequests: [],
+        reservationHistory: []
+      });
+
       toast.success('Présentoir ajouté avec succès');
       onClose();
     } catch (error) {
-      console.error('Erreur lors de l\'ajout du présentoir:', error);
+      console.error('Erreur lors de l\'ajout:', error);
       toast.error('Erreur lors de l\'ajout du présentoir');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleAddPublication = () => {
-    setSelectedPublications([...selectedPublications, { publicationId: '', quantity: 0 }]);
-  };
-
-  const handleRemovePublication = (index: number) => {
-    setSelectedPublications(selectedPublications.filter((_, i) => i !== index));
-  };
-
-  const updatePublication = (index: number, field: 'publicationId' | 'quantity', value: string | number) => {
-    const newPublications = [...selectedPublications];
-    newPublications[index] = {
-      ...newPublications[index],
-      [field]: value
-    };
-    setSelectedPublications(newPublications);
-  };
-
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
-      title="Ajouter un nouveau présentoir"
-    >
+    <Modal isOpen={isOpen} onClose={onClose} title="Ajouter un nouveau présentoir">
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Nom du présentoir
+            Nom du présentoir *
           </label>
           <input
             type="text"
@@ -112,7 +110,7 @@ const AddStandModal: React.FC<AddStandModalProps> = ({ isOpen, onClose }) => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Localisation
+            Localisation *
           </label>
           <input
             type="text"
@@ -120,7 +118,6 @@ const AddStandModal: React.FC<AddStandModalProps> = ({ isOpen, onClose }) => {
             value={formData.location}
             onChange={(e) => setFormData({ ...formData, location: e.target.value })}
             required
-            minLength={2}
             placeholder="Ex: Hall d'entrée"
           />
         </div>
@@ -133,7 +130,6 @@ const AddStandModal: React.FC<AddStandModalProps> = ({ isOpen, onClose }) => {
             className="input"
             value={formData.currentPoster}
             onChange={(e) => setFormData({ ...formData, currentPoster: e.target.value })}
-            required
           >
             <option value="">Sélectionnez une affiche</option>
             {availablePosters.map((poster) => (
@@ -142,64 +138,35 @@ const AddStandModal: React.FC<AddStandModalProps> = ({ isOpen, onClose }) => {
               </option>
             ))}
           </select>
-        </div>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <label className="block text-sm font-medium text-gray-700">
-              Publications
-            </label>
-            <button
-              type="button"
-              onClick={handleAddPublication}
-              className="btn btn-secondary py-1 px-2 h-8"
-            >
-              <Plus className="h-4 w-4" />
-              Ajouter une publication
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {selectedPublications.map((pub, index) => (
-              <div key={index} className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
-                <div className="flex-1">
-                  <select
-                    className="input mb-2"
-                    value={pub.publicationId}
-                    onChange={(e) => updatePublication(index, 'publicationId', e.target.value)}
-                    required
-                  >
-                    <option value="">Sélectionnez une publication</option>
-                    {publications.map((publication) => (
-                      <option key={publication.id} value={publication.id}>
-                        {publication.title}
-                      </option>
-                    ))}
-                  </select>
-                  
-                  <div className="flex items-center gap-3">
-                    <label className="text-sm text-gray-600">Quantité:</label>
-                    <input
-                      type="number"
-                      min="0"
-                      className="input w-24"
-                      value={pub.quantity}
-                      onChange={(e) => updatePublication(index, 'quantity', parseInt(e.target.value))}
-                      required
-                    />
+          {formData.currentPoster && (
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+              {(() => {
+                const selectedPoster = availablePosters.find(p => p.name === formData.currentPoster);
+                return selectedPoster ? (
+                  <div className="flex items-center gap-4">
+                    <div className="w-20 h-20 rounded-lg overflow-hidden bg-white flex items-center justify-center">
+                      {selectedPoster.imageUrl ? (
+                        <img
+                          src={selectedPoster.imageUrl}
+                          alt={selectedPoster.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Image className="h-8 w-8 text-gray-400" />
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-gray-900">{selectedPoster.name}</h4>
+                      {selectedPoster.description && (
+                        <p className="text-sm text-gray-600 mt-1">{selectedPoster.description}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-                
-                <button
-                  type="button"
-                  onClick={() => handleRemovePublication(index)}
-                  className="text-red-600 hover:text-red-700 p-1 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          </div>
+                ) : null;
+              })()}
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end space-x-3 pt-4">
@@ -207,14 +174,23 @@ const AddStandModal: React.FC<AddStandModalProps> = ({ isOpen, onClose }) => {
             type="button"
             onClick={onClose}
             className="btn btn-secondary"
+            disabled={loading}
           >
             Annuler
           </button>
           <button
             type="submit"
             className="btn btn-primary"
+            disabled={loading}
           >
-            Ajouter le présentoir
+            {loading ? (
+              <div className="flex items-center">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                Ajout en cours...
+              </div>
+            ) : (
+              'Ajouter le présentoir'
+            )}
           </button>
         </div>
       </form>

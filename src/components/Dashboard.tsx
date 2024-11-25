@@ -10,6 +10,7 @@ import StandList from './StandList';
 import RequestsWidget from './widgets/RequestsWidget';
 import LowStockWidget from './widgets/LowStockWidget';
 import StatCard from './StatCard';
+import { createNotification } from '../lib/notifications';
 
 const Dashboard: React.FC = () => {
   const { stands, publications, availablePosters } = useStands();
@@ -54,42 +55,8 @@ const Dashboard: React.FC = () => {
     )
   };
 
-  // Récupérer toutes les demandes en attente
-  const pendingRequests = {
-    posters: stands.reduce((acc, stand) => [
-      ...acc,
-      ...(stand.posterRequests || [])
-        .filter(req => req.status === 'pending')
-        .map(req => ({ ...req, standId: stand.id, standName: stand.name }))
-    ], [] as any[]),
-    
-    maintenance: stands.reduce((acc, stand) => [
-      ...acc,
-      ...(stand.maintenanceHistory || [])
-        .filter(m => m.status === 'pending')
-        .map(m => ({ 
-          ...m, 
-          standId: stand.id, 
-          standName: stand.name,
-          requestDate: m.date
-        }))
-    ], [] as any[]),
-    
-    lowStock: stands.reduce((acc, stand) => {
-      const lowStock = getLowStockPublications(stand.id);
-      if (lowStock.length > 0) {
-        acc.push({
-          standId: stand.id,
-          standName: stand.name,
-          publications: lowStock
-        });
-      }
-      return acc;
-    }, [] as any[])
-  };
-
   const handleUpdateStock = async (standId: string, publicationId: string, quantity: number) => {
-    if (!currentUser) {
+    if (!currentUser || !currentOrganization) {
       toast.error('Vous devez être connecté');
       return;
     }
@@ -106,6 +73,19 @@ const Dashboard: React.FC = () => {
             : pub
         )
       });
+
+      // Créer une notification si le stock est bas
+      const publication = publications.find(p => p.id === publicationId);
+      if (publication && quantity < publication.minStock) {
+        await createNotification(
+          currentOrganization.id,
+          'stock',
+          'Stock bas',
+          `Le stock de ${publication.title} est bas (${quantity}/${publication.minStock})`,
+          { standId, publicationId, quantity }
+        );
+      }
+
       toast.success('Stock mis à jour');
     } catch (error) {
       console.error('Error updating stock:', error);
@@ -161,106 +141,6 @@ const Dashboard: React.FC = () => {
           icon={<AlertTriangle className="h-6 w-6" />}
           color="from-orange-50 to-orange-100"
           link="/stands/low-stock"
-        />
-      </div>
-
-      {/* Widgets des demandes en attente */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <RequestsWidget
-          title="Changements d'Affiche"
-          icon={<FileText className="h-5 w-5" />}
-          requests={pendingRequests.posters}
-          onApprove={async (requestId, standId) => {
-            const stand = stands.find(s => s.id === standId);
-            if (!stand) return;
-            
-            const request = stand.posterRequests?.find(r => r.id === requestId);
-            if (!request) return;
-
-            try {
-              const standRef = doc(db, 'stands', standId);
-              await updateDoc(standRef, {
-                currentPoster: request.requestedPoster,
-                posterRequests: stand.posterRequests?.map(r => 
-                  r.id === requestId 
-                    ? { ...r, status: 'approved', processedBy: currentUser?.email, processedAt: new Date().toISOString() }
-                    : r
-                )
-              });
-              toast.success('Demande approuvée');
-            } catch (error) {
-              console.error('Error approving request:', error);
-              toast.error('Erreur lors de l\'approbation');
-            }
-          }}
-          onReject={async (requestId, standId) => {
-            const stand = stands.find(s => s.id === standId);
-            if (!stand) return;
-
-            try {
-              const standRef = doc(db, 'stands', standId);
-              await updateDoc(standRef, {
-                posterRequests: stand.posterRequests?.map(r => 
-                  r.id === requestId 
-                    ? { ...r, status: 'rejected', processedBy: currentUser?.email, processedAt: new Date().toISOString() }
-                    : r
-                )
-              });
-              toast.success('Demande rejetée');
-            } catch (error) {
-              console.error('Error rejecting request:', error);
-              toast.error('Erreur lors du rejet');
-            }
-          }}
-        />
-
-        <LowStockWidget
-          requests={pendingRequests.lowStock}
-          onProcess={handleUpdateStock}
-        />
-
-        <RequestsWidget
-          title="Maintenance"
-          icon={<Wrench className="h-5 w-5" />}
-          requests={pendingRequests.maintenance}
-          onApprove={async (requestId, standId) => {
-            const stand = stands.find(s => s.id === standId);
-            if (!stand) return;
-
-            try {
-              const standRef = doc(db, 'stands', standId);
-              await updateDoc(standRef, {
-                maintenanceHistory: stand.maintenanceHistory?.map(m => 
-                  m.id === requestId
-                    ? { ...m, status: 'approved', processedBy: currentUser?.email, processedAt: new Date().toISOString() }
-                    : m
-                )
-              });
-              toast.success('Maintenance effectuée');
-            } catch (error) {
-              console.error('Error completing maintenance:', error);
-              toast.error('Erreur lors de la maintenance');
-            }
-          }}
-          onReject={async (requestId, standId) => {
-            const stand = stands.find(s => s.id === standId);
-            if (!stand) return;
-
-            try {
-              const standRef = doc(db, 'stands', standId);
-              await updateDoc(standRef, {
-                maintenanceHistory: stand.maintenanceHistory?.map(m => 
-                  m.id === requestId
-                    ? { ...m, status: 'rejected', processedBy: currentUser?.email, processedAt: new Date().toISOString() }
-                    : m
-                )
-              });
-              toast.success('Demande rejetée');
-            } catch (error) {
-              console.error('Error rejecting maintenance:', error);
-              toast.error('Erreur lors du rejet');
-            }
-          }}
         />
       </div>
 

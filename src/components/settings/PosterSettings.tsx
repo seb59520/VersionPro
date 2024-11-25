@@ -7,6 +7,7 @@ import { collection, addDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query,
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../lib/firebase';
 import { POSTER_CATEGORIES } from '../../constants/categories';
+import Modal from '../Modal';
 
 const PosterSettings = () => {
   const { currentOrganization } = useOrganization();
@@ -45,6 +46,11 @@ const PosterSettings = () => {
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Veuillez sélectionner une image');
+        return;
+      }
+
       setFormData({ ...formData, file });
       
       // Créer un aperçu de l'image
@@ -56,16 +62,11 @@ const PosterSettings = () => {
     }
   };
 
-  const handleAddPoster = async (e) => {
+  const handleAddPoster = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!currentUser?.uid) {
+    if (!currentUser?.uid || !currentOrganization?.id) {
       toast.error('Vous devez être connecté');
-      return;
-    }
-
-    if (!currentOrganization?.id) {
-      toast.error('Organisation non trouvée');
       return;
     }
 
@@ -111,7 +112,11 @@ const PosterSettings = () => {
     }
   };
 
-  const handleRemovePoster = async (poster) => {
+  const handleDeletePoster = async (poster) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette affiche ?')) {
+      return;
+    }
+
     try {
       // Supprimer l'image du storage
       if (poster.storagePath) {
@@ -178,7 +183,7 @@ const PosterSettings = () => {
                         <p className="text-sm text-gray-600 mt-1">{poster.description}</p>
                         <div className="mt-2 flex justify-between items-center">
                           <button
-                            onClick={() => handleRemovePoster(poster)}
+                            onClick={() => handleDeletePoster(poster)}
                             className="text-red-600 hover:text-red-700 p-1 hover:bg-red-50 rounded-lg transition-colors"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -194,126 +199,123 @@ const PosterSettings = () => {
         })}
       </div>
 
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Ajouter une nouvelle affiche
-            </h3>
-            
-            <form onSubmit={handleAddPoster} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nom de l'affiche *
-                </label>
-                <input
-                  type="text"
-                  className="input bg-white"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  className="input bg-white"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Image *
-                </label>
-                <div className="mt-1 flex items-center gap-4">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="btn btn-secondary"
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Choisir une image
-                  </button>
-                </div>
-                {previewImage && (
-                  <div className="mt-4">
-                    <img
-                      src={previewImage}
-                      alt="Aperçu"
-                      className="max-h-48 rounded-lg object-contain"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Catégorie *
-                </label>
-                <select
-                  className="input bg-white"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  required
-                >
-                  <option value="">Sélectionnez une catégorie</option>
-                  {POSTER_CATEGORIES.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setPreviewImage(null);
-                    setFormData({
-                      name: '',
-                      description: '',
-                      category: '',
-                      file: null
-                    });
-                  }}
-                  className="btn btn-secondary"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn btn-primary"
-                >
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                      Ajout en cours...
-                    </div>
-                  ) : (
-                    'Ajouter'
-                  )}
-                </button>
-              </div>
-            </form>
+      <Modal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title="Ajouter une nouvelle affiche"
+      >
+        <form onSubmit={handleAddPoster} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nom de l'affiche *
+            </label>
+            <input
+              type="text"
+              className="input"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              required
+            />
           </div>
-        </div>
-      )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              className="input"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              rows={3}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Image *
+            </label>
+            <div className="mt-1 flex items-center gap-4">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="btn btn-secondary"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Choisir une image
+              </button>
+            </div>
+            {previewImage && (
+              <div className="mt-4">
+                <img
+                  src={previewImage}
+                  alt="Aperçu"
+                  className="max-h-48 rounded-lg object-contain"
+                />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Catégorie *
+            </label>
+            <select
+              className="input"
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              required
+            >
+              <option value="">Sélectionnez une catégorie</option>
+              {POSTER_CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddModal(false);
+                setPreviewImage(null);
+                setFormData({
+                  name: '',
+                  description: '',
+                  category: '',
+                  file: null
+                });
+              }}
+              className="btn btn-secondary"
+              disabled={loading}
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={loading}
+            >
+              {loading ? (
+                <div className="flex items-center">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Ajout en cours...
+                </div>
+              ) : (
+                'Ajouter'
+              )}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
