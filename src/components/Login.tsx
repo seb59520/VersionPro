@@ -84,7 +84,6 @@ const Login = () => {
       }
     } catch (error: any) {
       console.error('Google sign in error:', error);
-      toast.error('Erreur lors de la connexion avec Google');
     } finally {
       setLoading(false);
     }
