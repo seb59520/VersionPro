@@ -7,6 +7,13 @@ import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import Statistics from './components/Statistics';
 import Settings from './components/Settings';
+import GeneralSettings from './components/settings/GeneralSettings';
+import PosterSettings from './components/settings/PosterSettings';
+import PublicationSettings from './components/settings/PublicationSettings';
+import StandSettings from './components/settings/StandSettings';
+import MaintenanceSettings from './components/settings/MaintenanceSettings';
+import NotificationSettings from './components/settings/NotificationSettings';
+import UserProfileSettings from './components/settings/UserProfileSettings';
 import PublicStandView from './components/PublicStandView';
 import StandDetails from './components/StandDetails';
 import MaintenanceDashboard from './components/MaintenanceDashboard';
@@ -29,17 +36,26 @@ const App: React.FC = () => {
         />
         
         <Routes>
-          {/* Routes publiques - pas besoin d'authentification */}
+          {/* Routes publiques */}
           <Route path="/login" element={<Login />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
           <Route path="/stand/:id" element={<PublicStandView />} />
           
-          {/* Routes protégées - nécessitent une authentification */}
+          {/* Routes protégées */}
           <Route element={<AuthGuard><Layout /></AuthGuard>}>
             <Route index element={<Dashboard />} />
             <Route path="statistics" element={<Statistics />} />
             <Route path="maintenance" element={<MaintenanceDashboard />} />
-            <Route path="settings" element={<Settings />} />
+            
+            {/* Routes des paramètres */}
+            <Route path="settings" element={<GeneralSettings />} />
+            <Route path="settings/stands" element={<StandSettings />} />
+            <Route path="settings/posters" element={<PosterSettings />} />
+            <Route path="settings/publications" element={<PublicationSettings />} />
+            <Route path="settings/maintenance" element={<MaintenanceSettings />} />
+            <Route path="settings/notifications" element={<NotificationSettings />} />
+            <Route path="settings/profile" element={<UserProfileSettings />} />
+            
             <Route path="details/:type" element={<StandDetails />} />
             <Route path="admin/stand/:id" element={<StandDetailPage />} />
           </Route>

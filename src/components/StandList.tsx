@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { format, differenceInDays } from 'date-fns';
+import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { DisplayStand, ReservationFormData, Poster, Publication } from '../types';
 import { MapPin, Clock, User, FileText, AlertTriangle, BookOpen, ExternalLink, Wrench, Calendar } from 'lucide-react';
@@ -18,7 +18,6 @@ interface StandListProps {
   onCancelReservation: (standId: string) => void;
   onPosterRequest: (standId: string, requestedPoster: string, notes: string) => void;
   onUpdateStock: (standId: string, publicationId: string, quantity: number) => void;
-  onAddMaintenance: (standId: string, maintenance: any) => void;
   availablePosters: Poster[];
   publications: Publication[];
   hoveredStandId: string | null;
@@ -32,7 +31,6 @@ const StandList: React.FC<StandListProps> = ({
   onCancelReservation,
   onPosterRequest,
   onUpdateStock,
-  onAddMaintenance,
   availablePosters,
   publications = [],
   hoveredStandId,
@@ -47,6 +45,18 @@ const StandList: React.FC<StandListProps> = ({
 
   // Default base URL if organization settings are not available
   const baseUrl = currentOrganization?.settings?.baseUrl || `${window.location.origin}/stand/`;
+
+  const formatDate = (dateString: string | Date | undefined) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '';
+      return format(date, 'PPP', { locale: fr });
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return '';
+    }
+  };
 
   return (
     <div className="card overflow-hidden bg-gradient-to-br from-white to-gray-50">
@@ -132,7 +142,7 @@ const StandList: React.FC<StandListProps> = ({
                       <span>Affiche actuelle: {stand.currentPoster}</span>
                     </div>
                     
-                    {stand.isReserved && (
+                    {stand.isReserved && stand.reservedBy && stand.reservedUntil && (
                       <>
                         <div className="flex items-center text-gray-600">
                           <User className="h-4 w-4 mr-2 text-gray-400" />
@@ -140,7 +150,7 @@ const StandList: React.FC<StandListProps> = ({
                         </div>
                         <div className="flex items-center text-gray-600">
                           <Clock className="h-4 w-4 mr-2 text-gray-400" />
-                          <span>Jusqu'au: {format(new Date(stand.reservedUntil!), 'PPP', { locale: fr })}</span>
+                          <span>Jusqu'au: {formatDate(stand.reservedUntil)}</span>
                         </div>
                       </>
                     )}
@@ -278,7 +288,7 @@ const StandList: React.FC<StandListProps> = ({
           type={maintenanceModalStand.type}
           isOpen={true}
           onClose={() => setMaintenanceModalStand(null)}
-          onSubmit={onAddMaintenance}
+          onSubmit={onSubmit}
         />
       )}
     </div>

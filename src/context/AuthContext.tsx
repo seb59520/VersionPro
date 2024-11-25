@@ -4,35 +4,24 @@ import { auth, db } from '../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { initializeDatabase } from '../lib/initDb';
 import { toast } from 'react-hot-toast';
-import { preferencesManager } from '../lib/cache';
 import { 
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
-  updateProfile as firebaseUpdateProfile,
-  EmailAuthProvider,
-  reauthenticateWithCredential,
-  updatePassword as firebaseUpdatePassword
+  createUserWithEmailAndPassword
 } from 'firebase/auth';
 
-interface AuthUser extends User {
-  organizationId: string;
-  role: 'admin' | 'user';
-}
-
 interface AuthContextType {
-  currentUser: AuthUser | null;
+  currentUser: User | null;
   loading: boolean;
-  isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  updateProfile: (data: { displayName?: string; photoURL?: string }) => Promise<void>;
-  updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,32 +29,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (user) {
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setCurrentUser({
-              ...user,
-              organizationId: userData.organizationId,
-              role: userData.role
-            } as AuthUser);
-
-            // Load organization data
-            if (userData.organizationId) {
-              const orgDoc = await getDoc(doc(db, 'organizations', userData.organizationId));
-              if (orgDoc.exists()) {
-                const orgData = { id: orgDoc.id, ...orgDoc.data() };
-                await preferencesManager.setPreference('currentOrganization', orgData);
-              }
-            }
-          } else {
-            setCurrentUser(null);
+          if (!userDoc.exists()) {
+            await initializeDatabase(user.uid, user.email || '');
           }
         } catch (error) {
-          console.error('Error fetching user data:', error);
-          setCurrentUser(null);
+          console.error('Error checking user document:', error);
         }
-      } else {
-        setCurrentUser(null);
       }
+      setCurrentUser(user);
       setLoading(false);
     });
 
@@ -75,30 +46,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       const { user } = await signInWithEmailAndPassword(auth, email, password);
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      
-      if (!userDoc.exists()) {
-        throw new Error('User data not found');
-      }
-
-      const userData = userDoc.data();
-      
-      // Load organization data
-      if (userData.organizationId) {
-        const orgDoc = await getDoc(doc(db, 'organizations', userData.organizationId));
-        if (orgDoc.exists()) {
-          const orgData = { id: orgDoc.id, ...orgDoc.data() };
-          await preferencesManager.setPreference('currentOrganization', orgData);
-        }
-      }
-
-      setCurrentUser({
-        ...user,
-        organizationId: userData.organizationId,
-        role: userData.role
-      } as AuthUser);
-    } catch (error) {
+      setCurrentUser(user);
+    } catch (error: any) {
       console.error('Error signing in:', error);
+      throw error;
+    }
+  };
+
+  const signUp = async (email: string, password: string) => {
+    try {
+      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      await initializeDatabase(user.uid, email);
+      setCurrentUser(user);
+    } catch (error: any) {
+      console.error('Error signing up:', error);
       throw error;
     }
   };
@@ -107,37 +68,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await firebaseSignOut(auth);
       setCurrentUser(null);
-      // Clear organization data from cache
-      await preferencesManager.deletePreference('currentOrganization');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing out:', error);
-      throw error;
-    }
-  };
-
-  const updateProfile = async (data: { displayName?: string; photoURL?: string }) => {
-    if (!currentUser) throw new Error('No user logged in');
-    try {
-      await firebaseUpdateProfile(currentUser, data);
-      toast.success('Profil mis à jour avec succès');
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      throw error;
-    }
-  };
-
-  const updatePassword = async (currentPassword: string, newPassword: string) => {
-    if (!currentUser) throw new Error('No user logged in');
-    try {
-      const credential = EmailAuthProvider.credential(
-        currentUser.email!,
-        currentPassword
-      );
-      await reauthenticateWithCredential(currentUser, credential);
-      await firebaseUpdatePassword(currentUser, newPassword);
-      toast.success('Mot de passe mis à jour avec succès');
-    } catch (error) {
-      console.error('Error updating password:', error);
       throw error;
     }
   };
@@ -145,11 +77,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value = {
     currentUser,
     loading,
-    isAdmin: currentUser?.role === 'admin',
     signIn,
     signOut,
-    updateProfile,
-    updatePassword
+    signUp
   };
 
   return (
@@ -166,5 +96,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-export default AuthProvider;

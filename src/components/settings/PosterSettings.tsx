@@ -2,20 +2,20 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useOrganization } from '../../context/OrganizationContext';
 import { Plus, Trash2, Upload, Image } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { Poster } from '../../types';
 import { uploadImage } from '../../lib/storage';
+import { useAuth } from '../../context/AuthContext';
 
 const PosterSettings = () => {
   const { currentOrganization } = useOrganization();
-  const [posters, setPosters] = useState<Poster[]>([]);
+  const { currentUser } = useAuth();
+  const [posters, setPosters] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingPoster, setEditingPoster] = useState<Poster | null>(null);
   const [loading, setLoading] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [newPoster, setNewPoster] = useState({
+  const [previewImage, setPreviewImage] = useState(null);
+  const fileInputRef = useRef(null);
+  const [formData, setFormData] = useState({
     name: '',
     description: '',
     imageUrl: '',
@@ -23,113 +23,102 @@ const PosterSettings = () => {
   });
 
   useEffect(() => {
-    if (!currentOrganization?.id) return;
+    if (!currentUser?.uid || !currentOrganization?.id) return;
 
-    // Subscribe to posters collection
-    const postersQuery = query(
+    const q = query(
       collection(db, 'posters'),
       where('organizationId', '==', currentOrganization.id)
     );
 
-    const unsubscribe = onSnapshot(postersQuery, (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const postersData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      })) as Poster[];
+      }));
       setPosters(postersData);
     });
 
     return () => unsubscribe();
-  }, [currentOrganization?.id]);
+  }, [currentUser?.uid, currentOrganization?.id]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPreviewImage(reader.result as string);
+        setPreviewImage(reader.result);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleAddPoster = async () => {
-    if (!currentOrganization?.id || !newPoster.name) {
-      toast.error('Veuillez remplir tous les champs obligatoires');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!currentUser?.uid) {
+      toast.error('Vous devez être connecté');
+      return;
+    }
+
+    if (!currentOrganization?.id) {
+      toast.error('Organisation non trouvée');
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      toast.error('Le nom est requis');
       return;
     }
 
     try {
       setLoading(true);
-      const file = fileInputRef.current?.files?.[0];
-      let imageUrl = newPoster.imageUrl;
+      let imageUrl = formData.imageUrl;
 
-      if (file) {
-        imageUrl = await uploadImage(file, 'posters');
+      if (fileInputRef.current?.files?.[0]) {
+        imageUrl = await uploadImage(fileInputRef.current.files[0], 'posters');
       }
 
-      // Add poster to Firestore
-      await addDoc(collection(db, 'posters'), {
-        ...newPoster,
+      const posterData = {
+        ...formData,
         imageUrl,
         isActive: true,
         organizationId: currentOrganization.id,
-        createdAt: new Date().toISOString()
-      });
+        userId: currentUser.uid,
+        createdAt: serverTimestamp()
+      };
 
-      setNewPoster({ name: '', description: '', imageUrl: '', category: '' });
+      await addDoc(collection(db, 'posters'), posterData);
+
+      setFormData({
+        name: '',
+        description: '',
+        imageUrl: '',
+        category: ''
+      });
       setPreviewImage(null);
       setShowAddModal(false);
       toast.success('Affiche ajoutée avec succès');
     } catch (error) {
       console.error('Erreur lors de l\'ajout:', error);
-      toast.error('Erreur lors de l\'ajout de l\'affiche');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUpdatePoster = async () => {
-    if (!editingPoster) return;
-
-    try {
-      setLoading(true);
-      const file = fileInputRef.current?.files?.[0];
-      let imageUrl = editingPoster.imageUrl;
-
-      if (file) {
-        imageUrl = await uploadImage(file, 'posters');
+      let message = 'Erreur lors de l\'ajout de l\'affiche';
+      if (error.code === 'permission-denied') {
+        message = 'Vous n\'avez pas les permissions nécessaires';
       }
-
-      // Update poster in Firestore
-      const posterRef = doc(db, 'posters', editingPoster.id);
-      await updateDoc(posterRef, {
-        ...editingPoster,
-        imageUrl,
-        updatedAt: new Date().toISOString()
-      });
-
-      setEditingPoster(null);
-      setPreviewImage(null);
-      toast.success('Affiche mise à jour avec succès');
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour:', error);
-      toast.error('Erreur lors de la mise à jour de l\'affiche');
+      toast.error(message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRemovePoster = async (posterId: string) => {
-    try {
-      // Delete poster from Firestore
-      await deleteDoc(doc(db, 'posters', posterId));
-      toast.success('Affiche supprimée avec succès');
-    } catch (error) {
-      console.error('Erreur lors de la suppression:', error);
-      toast.error('Erreur lors de la suppression de l\'affiche');
-    }
-  };
+  if (!currentUser?.uid) {
+    return (
+      <div className="card p-6">
+        <div className="text-center py-8">
+          <p className="text-gray-600">Veuillez vous connecter pour gérer les affiches.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="card p-6">
@@ -151,16 +140,17 @@ const PosterSettings = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {posters.map(poster => (
-          <div key={poster.id} className="card p-4">
+      {/* Liste des affiches */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {posters.map((poster) => (
+          <div key={poster.id} className="card p-4 bg-gray-50 border-2 border-gray-200">
             <div className="flex gap-4">
-              <div className="w-32 h-32 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+              <div className="w-24 h-24 rounded-lg overflow-hidden bg-white flex items-center justify-center">
                 {poster.imageUrl ? (
                   <img
                     src={poster.imageUrl}
                     alt={poster.name}
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-cover"
                   />
                 ) : (
                   <Image className="h-8 w-8 text-gray-400" />
@@ -168,23 +158,11 @@ const PosterSettings = () => {
               </div>
               <div className="flex-1">
                 <h3 className="font-medium text-gray-900">{poster.name}</h3>
-                <p className="text-sm text-gray-500 mt-1">{poster.description}</p>
+                <p className="text-sm text-gray-600 mt-1">{poster.description}</p>
                 <div className="mt-2 flex justify-between items-center">
-                  <span className="text-sm text-gray-600">{poster.category}</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setEditingPoster(poster)}
-                      className="text-blue-600 hover:text-blue-700 p-1 hover:bg-blue-50 rounded-lg transition-colors"
-                    >
-                      Modifier
-                    </button>
-                    <button
-                      onClick={() => handleRemovePoster(poster.id)}
-                      className="text-red-600 hover:text-red-700 p-1 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
+                  <span className="text-sm font-medium text-gray-700 bg-white px-2 py-1 rounded-md shadow-sm">
+                    {poster.category}
+                  </span>
                 </div>
               </div>
             </div>
@@ -192,30 +170,24 @@ const PosterSettings = () => {
         ))}
       </div>
 
-      {/* Add/Edit Poster Modal */}
-      {(showAddModal || editingPoster) && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+      {/* Modal d'ajout */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4">
-              {editingPoster ? 'Modifier l\'affiche' : 'Ajouter une nouvelle affiche'}
+              Ajouter une nouvelle affiche
             </h3>
             
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              editingPoster ? handleUpdatePoster() : handleAddPoster();
-            }} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nom de l'affiche
+                  Nom de l'affiche *
                 </label>
                 <input
                   type="text"
-                  className="input"
-                  value={editingPoster?.name || newPoster.name}
-                  onChange={(e) => editingPoster 
-                    ? setEditingPoster({ ...editingPoster, name: e.target.value })
-                    : setNewPoster({ ...newPoster, name: e.target.value })
-                  }
+                  className="input bg-white"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                 />
               </div>
@@ -225,18 +197,16 @@ const PosterSettings = () => {
                   Description
                 </label>
                 <textarea
-                  className="input"
-                  value={editingPoster?.description || newPoster.description}
-                  onChange={(e) => editingPoster
-                    ? setEditingPoster({ ...editingPoster, description: e.target.value })
-                    : setNewPoster({ ...newPoster, description: e.target.value })
-                  }
+                  className="input bg-white"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  rows={3}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Image
+                  Image *
                 </label>
                 <div className="mt-1 flex items-center gap-4">
                   <input
@@ -255,10 +225,10 @@ const PosterSettings = () => {
                     Choisir une image
                   </button>
                 </div>
-                {(previewImage || editingPoster?.imageUrl || newPoster.imageUrl) && (
+                {previewImage && (
                   <div className="mt-4">
                     <img
-                      src={previewImage || editingPoster?.imageUrl || newPoster.imageUrl}
+                      src={previewImage}
                       alt="Aperçu"
                       className="max-h-48 rounded-lg object-contain"
                     />
@@ -268,16 +238,14 @@ const PosterSettings = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Catégorie
+                  Catégorie *
                 </label>
                 <input
                   type="text"
-                  className="input"
-                  value={editingPoster?.category || newPoster.category}
-                  onChange={(e) => editingPoster
-                    ? setEditingPoster({ ...editingPoster, category: e.target.value })
-                    : setNewPoster({ ...newPoster, category: e.target.value })
-                  }
+                  className="input bg-white"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  required
                 />
               </div>
 
@@ -286,8 +254,13 @@ const PosterSettings = () => {
                   type="button"
                   onClick={() => {
                     setShowAddModal(false);
-                    setEditingPoster(null);
                     setPreviewImage(null);
+                    setFormData({
+                      name: '',
+                      description: '',
+                      imageUrl: '',
+                      category: ''
+                    });
                   }}
                   className="btn btn-secondary"
                 >
@@ -301,10 +274,10 @@ const PosterSettings = () => {
                   {loading ? (
                     <div className="flex items-center">
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                      {editingPoster ? 'Mise à jour...' : 'Ajout...'}
+                      Ajout en cours...
                     </div>
                   ) : (
-                    editingPoster ? 'Mettre à jour' : 'Ajouter'
+                    'Ajouter'
                   )}
                 </button>
               </div>

@@ -1,73 +1,93 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Fonctions utilitaires
+    // Helper functions
     function isAuthenticated() {
       return request.auth != null;
     }
     
-    function isAdmin(userId) {
+    function isUserAdmin() {
       return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(userId)) &&
-        get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin';
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
-    
+
     function belongsToOrganization(organizationId) {
       return isAuthenticated() && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == organizationId;
     }
 
-    // Collection Organizations
-    match /organizations/{organizationId} {
-      allow read: if true; // Allow public read access for domain-based routing
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isUserAdmin());
       allow create: if isAuthenticated();
-      allow update: if belongsToOrganization(organizationId) && isAdmin(request.auth.uid);
+      allow update: if isAuthenticated() && (isOwner(userId) || isUserAdmin());
+      allow delete: if isUserAdmin();
+    }
+
+    // Organizations collection
+    match /organizations/{organizationId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if belongsToOrganization(organizationId);
       allow delete: if false;
     }
 
-    // Collection Users
-    match /users/{userId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == userId || 
-        belongsToOrganization(resource.data.organizationId)
-      );
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        request.auth.uid == userId || 
-        (belongsToOrganization(resource.data.organizationId) && isAdmin(request.auth.uid))
-      );
-      allow delete: if isAdmin(request.auth.uid);
-    }
-
-    // Collection Stands
+    // Stands collection
     match /stands/{standId} {
       allow read: if true;
-      allow create: if isAuthenticated() && belongsToOrganization(request.resource.data.organizationId);
-      allow update: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
-      allow delete: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
+      allow create: if isAuthenticated() && 
+        belongsToOrganization(request.resource.data.organizationId);
+      allow update: if isAuthenticated() && 
+        belongsToOrganization(resource.data.organizationId);
+      allow delete: if isAuthenticated() && 
+        belongsToOrganization(resource.data.organizationId) &&
+        isUserAdmin();
     }
 
-    // Collection Publications
-    match /publications/{publicationId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && belongsToOrganization(request.resource.data.organizationId);
-      allow update: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
-      allow delete: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
-    }
-
-    // Collection Posters
+    // Posters collection
     match /posters/{posterId} {
       allow read: if true;
-      allow create: if isAuthenticated() && belongsToOrganization(request.resource.data.organizationId);
-      allow update: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
-      allow delete: if isAuthenticated() && belongsToOrganization(resource.data.organizationId);
+      allow create: if isAuthenticated() && 
+        belongsToOrganization(request.resource.data.organizationId) &&
+        request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+        belongsToOrganization(resource.data.organizationId) &&
+        (resource.data.userId == request.auth.uid || isUserAdmin());
+      allow delete: if isAuthenticated() && 
+        belongsToOrganization(resource.data.organizationId) &&
+        (resource.data.userId == request.auth.uid || isUserAdmin());
     }
 
-    // Collection Settings
-    match /settings/{organizationId} {
+    // Publications collection
+    match /publications/{publicationId} {
       allow read: if true;
-      allow write: if isAuthenticated() && belongsToOrganization(organizationId);
+      allow create: if isAuthenticated() && 
+        belongsToOrganization(request.resource.data.organizationId) &&
+        request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+        belongsToOrganization(resource.data.organizationId) &&
+        (resource.data.userId == request.auth.uid || isUserAdmin());
+      allow delete: if isAuthenticated() && 
+        belongsToOrganization(resource.data.organizationId) &&
+        (resource.data.userId == request.auth.uid || isUserAdmin());
+    }
+
+    // Maintenance collection
+    match /maintenance/{maintenanceId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && 
+        belongsToOrganization(request.resource.data.organizationId);
+      allow update: if isAuthenticated() && 
+        belongsToOrganization(resource.data.organizationId);
+      allow delete: if isAuthenticated() && 
+        belongsToOrganization(resource.data.organizationId) &&
+        isUserAdmin();
     }
   }
 }

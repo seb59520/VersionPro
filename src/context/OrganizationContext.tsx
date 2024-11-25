@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Organization } from '../types';
-import { getOrganizationByDomain, getOrganizationById } from '../lib/organization';
+import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
-import { preferencesManager } from '../lib/cache';
 
 interface OrganizationContextType {
   currentOrganization: Organization | null;
@@ -20,36 +20,45 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const { currentUser } = useAuth();
 
   useEffect(() => {
+    if (!currentUser) {
+      setCurrentOrganization(null);
+      setLoading(false);
+      return;
+    }
+
     const loadOrganization = async () => {
       try {
-        let org: Organization | null = null;
-
-        // Try to load from cache first
-        const cachedOrg = await preferencesManager.getPreference('currentOrganization');
-        if (cachedOrg) {
-          org = cachedOrg;
+        // Get user document first to get organizationId
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (!userDoc.exists()) {
+          setLoading(false);
+          return;
         }
 
-        if (!org && currentUser?.organizationId) {
-          // Load organization based on user's organizationId
-          org = await getOrganizationById(currentUser.organizationId);
-        }
+        const organizationId = userDoc.data().organizationId;
 
-        if (!org) {
-          // Try to load organization based on domain if no user org found
-          const domain = window.location.hostname;
-          org = await getOrganizationByDomain(domain);
-        }
+        // Subscribe to organization document
+        const unsubscribe = onSnapshot(
+          doc(db, 'organizations', organizationId),
+          (doc) => {
+            if (doc.exists()) {
+              setCurrentOrganization({ id: doc.id, ...doc.data() } as Organization);
+            } else {
+              setCurrentOrganization(null);
+            }
+            setLoading(false);
+          },
+          (error) => {
+            console.error('Error fetching organization:', error);
+            setError(error as Error);
+            setLoading(false);
+          }
+        );
 
-        if (org) {
-          setCurrentOrganization(org);
-          // Cache the organization
-          await preferencesManager.setPreference('currentOrganization', org);
-        }
-      } catch (err) {
-        console.error('Error loading organization:', err);
-        setError(err as Error);
-      } finally {
+        return () => unsubscribe();
+      } catch (error) {
+        console.error('Error loading organization:', error);
+        setError(error as Error);
         setLoading(false);
       }
     };
