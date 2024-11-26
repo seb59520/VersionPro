@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { Lock, Mail, AlertCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { signIn, createUser } from '../lib/auth';
 import OrganizationSelector from './OrganizationSelector';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -14,16 +12,10 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showOrgSelector, setShowOrgSelector] = useState(false);
-  const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const from = location.state?.from?.pathname || '/';
-
-  const checkUserOrganization = async (userId: string) => {
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    return userDoc.exists() && userDoc.data().organizationId;
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,21 +23,23 @@ const Login = () => {
     setLoading(true);
 
     try {
-      let user;
-      if (isSignUp) {
-        user = await signUp(email, password);
-        setShowOrgSelector(true);
-      } else {
-        user = await signIn(email, password);
-        const hasOrg = await checkUserOrganization(user.uid);
-        if (!hasOrg) {
-          setShowOrgSelector(true);
-        } else {
-          navigate(from, { replace: true });
-        }
+      if (!navigator.onLine) {
+        throw new Error('Pas de connexion internet');
       }
-    } catch (error) {
-      setError('Une erreur est survenue lors de la connexion');
+
+      if (isSignUp) {
+        await createUser(email, password);
+        setShowOrgSelector(true);
+        toast.success('Compte créé avec succès');
+      } else {
+        await signIn(email, password);
+        navigate(from, { replace: true });
+        toast.success('Connexion réussie');
+      }
+    } catch (error: any) {
+      console.error('Authentication error:', error);
+      setError(error.message || 'Une erreur est survenue');
+      toast.error(error.message);
     } finally {
       setLoading(false);
     }
@@ -56,7 +50,8 @@ const Login = () => {
       <OrganizationSelector 
         onComplete={() => {
           navigate(from, { replace: true });
-        }} 
+          toast.success('Organisation sélectionnée avec succès');
+        }}
       />
     );
   }
@@ -117,6 +112,7 @@ const Login = () => {
                 <input
                   type="password"
                   required
+                  minLength={6}
                   className="input pl-10"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

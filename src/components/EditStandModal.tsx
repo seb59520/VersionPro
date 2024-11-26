@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import Modal from './Modal';
 import { DisplayStand } from '../types';
 import { toast } from 'react-hot-toast';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { QRCodeSVG } from 'qrcode.react';
-import { Link as LinkIcon } from 'lucide-react';
+import { Link as LinkIcon, Calendar } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
+import { format } from 'date-fns';
 
 interface EditStandModalProps {
   stand: DisplayStand;
@@ -23,7 +24,8 @@ const EditStandModal: React.FC<EditStandModalProps> = ({
   const [formData, setFormData] = useState({
     name: stand.name,
     location: stand.location,
-    currentPoster: stand.currentPoster
+    currentPoster: stand.currentPoster,
+    createdAt: format(new Date(stand.createdAt || new Date()), 'yyyy-MM-dd')
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,7 +40,8 @@ const EditStandModal: React.FC<EditStandModalProps> = ({
       const standRef = doc(db, 'stands', stand.id);
       await updateDoc(standRef, {
         ...formData,
-        lastUpdated: new Date().toISOString()
+        createdAt: new Date(formData.createdAt).toISOString(),
+        lastUpdated: serverTimestamp()
       });
       
       toast.success('Présentoir mis à jour avec succès');
@@ -95,6 +98,25 @@ const EditStandModal: React.FC<EditStandModalProps> = ({
             value={formData.currentPoster}
             onChange={(e) => setFormData({ ...formData, currentPoster: e.target.value })}
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Date d'installation
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Calendar className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              type="date"
+              className="input pl-10"
+              value={formData.createdAt}
+              onChange={(e) => setFormData({ ...formData, createdAt: e.target.value })}
+              max={format(new Date(), 'yyyy-MM-dd')}
+              required
+            />
+          </div>
         </div>
 
         <div className="bg-gray-50 p-4 rounded-lg space-y-4">

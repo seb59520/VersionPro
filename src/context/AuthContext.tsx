@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { initializeDatabase } from '../lib/initDb';
 import { toast } from 'react-hot-toast';
 import * as authService from '../lib/auth';
 
@@ -13,8 +12,6 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   signUp: (email: string, password: string) => Promise<User>;
   signInWithGoogle: () => Promise<User>;
-  updateProfile: (data: { displayName?: string; photoURL?: string }) => Promise<void>;
-  updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,7 +26,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (!userDoc.exists()) {
-            await initializeDatabase(user.uid, user.email || '');
+            await setDoc(doc(db, 'users', user.uid), {
+              email: user.email,
+              role: 'user',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
           }
         } catch (error) {
           console.error('Error checking user document:', error);
@@ -49,17 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signIn: authService.signIn,
     signOut: authService.signOut,
     signUp: authService.createUser,
-    signInWithGoogle: authService.signInWithGoogle,
-    updateProfile: async (data: { displayName?: string; photoURL?: string }) => {
-      if (!currentUser) throw new Error('No user logged in');
-      await auth.currentUser?.updateProfile(data);
-      setCurrentUser(auth.currentUser);
-    },
-    updatePassword: async (currentPassword: string, newPassword: string) => {
-      if (!currentUser) throw new Error('No user logged in');
-      await authService.signIn(currentUser.email!, currentPassword);
-      await auth.currentUser?.updatePassword(newPassword);
-    }
+    signInWithGoogle: authService.signInWithGoogle
   };
 
   return (

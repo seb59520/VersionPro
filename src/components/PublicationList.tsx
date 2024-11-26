@@ -6,7 +6,7 @@ import { formatDateSafely } from '../utils/dateUtils';
 interface PublicationListProps {
   publications: Publication[];
   associations: PublicationAssociation[];
-  onRemoveAssociation: (associationId: string) => void;
+  onRemoveAssociation?: (associationId: string) => void;
 }
 
 const PublicationList: React.FC<PublicationListProps> = ({

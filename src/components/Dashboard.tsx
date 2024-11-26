@@ -1,22 +1,33 @@
 import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useStands } from '../context/StandsContext';
 import { useAuth } from '../context/AuthContext';
 import { useOrganization } from '../context/OrganizationContext';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { toast } from 'react-hot-toast';
-import { Building2, LayoutDashboard, BarChart2, Settings, Wrench, AlertTriangle, FileText, BookOpen } from 'lucide-react';
+import { Building2, LayoutDashboard, BarChart2, Settings, Wrench, AlertTriangle, FileText, BookOpen, ExternalLink } from 'lucide-react';
 import StandList from './StandList';
 import RequestsWidget from './widgets/RequestsWidget';
 import LowStockWidget from './widgets/LowStockWidget';
 import StatCard from './StatCard';
 import { createNotification } from '../lib/notifications';
+import AddStandModal from './AddStandModal';
+import PosterRequestModal from './PosterRequestModal';
+import PublicationStockModal from './PublicationStockModal';
+import MaintenanceModal from './MaintenanceModal';
 
-const Dashboard: React.FC = () => {
-  const { stands, publications, availablePosters } = useStands();
+const Dashboard = () => {
+  const navigate = useNavigate();
+  const { stands, publications, availablePosters, addMaintenance } = useStands();
   const { currentUser } = useAuth();
   const { currentOrganization } = useOrganization();
   const [hoveredStandId, setHoveredStandId] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedStand, setSelectedStand] = useState(null);
+  const [posterRequestStand, setPosterRequestStand] = useState(null);
+  const [stockModalStand, setStockModalStand] = useState(null);
+  const [maintenanceModalStand, setMaintenanceModalStand] = useState(null);
 
   // Fonction pour vérifier le stock bas
   const getLowStockPublications = (standId: string) => {
@@ -71,7 +82,8 @@ const Dashboard: React.FC = () => {
           pub.publicationId === publicationId
             ? { ...pub, quantity, lastUpdated: new Date().toISOString() }
             : pub
-        )
+        ),
+        lastUpdated: serverTimestamp()
       });
 
       // Créer une notification si le stock est bas
@@ -90,6 +102,65 @@ const Dashboard: React.FC = () => {
     } catch (error) {
       console.error('Error updating stock:', error);
       toast.error('Erreur lors de la mise à jour');
+    }
+  };
+
+  const handleReserve = async (standId: string, data: any) => {
+    try {
+      const standRef = doc(db, 'stands', standId);
+      await updateDoc(standRef, {
+        isReserved: true,
+        reservedBy: data.name,
+        reservedUntil: data.endDate.toISOString(),
+        lastUpdated: serverTimestamp()
+      });
+      toast.success('Réservation effectuée avec succès');
+    } catch (error) {
+      console.error('Error making reservation:', error);
+      toast.error('Erreur lors de la réservation');
+    }
+  };
+
+  const handleCancelReservation = async (standId: string) => {
+    try {
+      const standRef = doc(db, 'stands', standId);
+      await updateDoc(standRef, {
+        isReserved: false,
+        reservedBy: null,
+        reservedUntil: null,
+        lastUpdated: serverTimestamp()
+      });
+      toast.success('Réservation annulée');
+    } catch (error) {
+      console.error('Error canceling reservation:', error);
+      toast.error('Erreur lors de l\'annulation');
+    }
+  };
+
+  const handlePosterRequest = async (standId: string, requestedPoster: string, notes: string) => {
+    try {
+      const stand = stands.find(s => s.id === standId);
+      if (!stand) return;
+
+      const standRef = doc(db, 'stands', standId);
+      await updateDoc(standRef, {
+        posterRequests: [
+          ...(stand.posterRequests || []),
+          {
+            id: crypto.randomUUID(),
+            requestedPoster,
+            requestDate: new Date().toISOString(),
+            status: 'pending',
+            notes
+          }
+        ],
+        lastUpdated: serverTimestamp()
+      });
+
+      toast.success('Demande d\'affiche envoyée');
+    } catch (error) {
+      console.error('Error requesting poster:', error);
+      toast.error('Erreur lors de la demande');
     }
   };
 
@@ -149,9 +220,9 @@ const Dashboard: React.FC = () => {
         <StandList 
           stands={stands}
           getLowStockPublications={getLowStockPublications}
-          onReserve={handleUpdateStock}
-          onCancelReservation={handleUpdateStock}
-          onPosterRequest={handleUpdateStock}
+          onReserve={handleReserve}
+          onCancelReservation={handleCancelReservation}
+          onPosterRequest={handlePosterRequest}
           onUpdateStock={handleUpdateStock}
           availablePosters={availablePosters}
           publications={publications}
@@ -159,6 +230,47 @@ const Dashboard: React.FC = () => {
           setHoveredStandId={setHoveredStandId}
         />
       </div>
+
+      {/* Modals */}
+      {showAddModal && (
+        <AddStandModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
+
+      {selectedStand && (
+        <PosterRequestModal
+          stand={selectedStand}
+          isOpen={true}
+          onClose={() => setSelectedStand(null)}
+          onSubmit={handlePosterRequest}
+          availablePosters={availablePosters}
+        />
+      )}
+
+      {stockModalStand && (
+        <PublicationStockModal
+          stand={stockModalStand}
+          isOpen={true}
+          onClose={() => setStockModalStand(null)}
+          onUpdateStock={handleUpdateStock}
+          publications={publications}
+        />
+      )}
+
+      {maintenanceModalStand && (
+        <MaintenanceModal
+          stand={maintenanceModalStand}
+          type="preventive"
+          isOpen={true}
+          onClose={() => setMaintenanceModalStand(null)}
+          onSubmit={(standId, maintenance) => {
+            addMaintenance(standId, maintenance);
+            setMaintenanceModalStand(null);
+          }}
+        />
+      )}
     </div>
   );
 };

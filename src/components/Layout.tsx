@@ -20,7 +20,7 @@ import { useOrganization } from '../context/OrganizationContext';
 import { toast } from 'react-hot-toast';
 import NotificationBell from './NotificationBell';
 
-const Layout: React.FC = () => {
+const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut } = useAuth();
@@ -50,7 +50,9 @@ const Layout: React.FC = () => {
     try {
       await signOut();
       navigate('/login');
+      toast.success('Déconnexion réussie');
     } catch (error) {
+      console.error('Error signing out:', error);
       toast.error('Erreur lors de la déconnexion');
     }
   };

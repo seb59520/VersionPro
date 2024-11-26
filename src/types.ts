@@ -1,35 +1,25 @@
-export interface PublicationAssociation {
-  id: string;
-  publicationId: string;
-  standId: string;
-  startDate: Date;
-  endDate?: Date;
-  quantity: number;
-  status: 'active' | 'inactive';
-  requestedBy?: string;
-  notes?: string;
+// ... existing types ...
+
+export interface OrganizationSettings {
+  baseUrl: string;
+  maxReservationDays: number;
+  minAdvanceHours: number;
+  emailNotifications: {
+    newReservation: boolean;
+    posterRequest: boolean;
+    maintenance: boolean;
+  };
+  maintenance: {
+    preventiveIntervalMonths: number;
+    emailNotifications: boolean;
+  };
 }
 
-export interface Publication {
+export interface Organization {
   id: string;
-  title: string;
-  description?: string;
-  imageUrl: string;
-  category: string;
-  isActive: boolean;
-  minStock: number;
-  organizationId: string;
-}
-
-export interface PublicationRequest {
-  id: string;
-  publicationId: string;
-  standId: string;
-  requestedBy: string;
-  requestDate: Date;
-  startDate: Date;
-  endDate?: Date;
-  quantity: number;
-  status: 'pending' | 'approved' | 'rejected';
-  notes?: string;
+  name: string;
+  domain: string;
+  settings: OrganizationSettings;
+  createdAt: string;
+  updatedAt?: string;
 }

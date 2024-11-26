@@ -1,48 +1,95 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { MapPin, Clock, User, ArrowLeft, BookOpen, AlertTriangle, FileText, Calendar, Image } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { DisplayStand } from '../types';
 import Modal from './Modal';
 import MaintenanceRequestModal from './MaintenanceRequestModal';
 import PublicationList from './PublicationList';
 import { formatDateSafely } from '../utils/dateUtils';
+import ReservationModal from './ReservationModal';
+import UsageReportModal from './UsageReportModal';
 
-const PublicStandView: React.FC = () => {
+const PublicStandView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [showMaintenanceRequestModal, setShowMaintenanceRequestModal] = useState(false);
+  const [showReservationModal, setShowReservationModal] = useState(false);
+  const [showUsageModal, setShowUsageModal] = useState(false);
   const [stand, setStand] = useState<DisplayStand | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const handleMaintenanceRequest = async (data: { description: string; issues: string }) => {
+  useEffect(() => {
+    const loadStand = async () => {
+      if (!id) return;
+
+      try {
+        const standDoc = await getDoc(doc(db, 'stands', id));
+        if (standDoc.exists()) {
+          setStand({ id: standDoc.id, ...standDoc.data() } as DisplayStand);
+        }
+        setLoading(false);
+      } catch (error) {
+        console.error('Error loading stand:', error);
+        toast.error('Erreur lors du chargement du présentoir');
+        setLoading(false);
+      }
+    };
+
+    loadStand();
+  }, [id]);
+
+  const handleReservation = async (data: { name: string; startDate: Date; endDate: Date }) => {
     if (!stand) return;
 
     try {
       const standRef = doc(db, 'stands', stand.id);
       await updateDoc(standRef, {
-        maintenanceHistory: [
-          ...(stand.maintenanceHistory || []),
+        isReserved: true,
+        reservedBy: data.name,
+        reservedUntil: data.endDate.toISOString(),
+        lastUpdated: serverTimestamp()
+      });
+
+      setStand(prev => prev ? {
+        ...prev,
+        isReserved: true,
+        reservedBy: data.name,
+        reservedUntil: data.endDate.toISOString()
+      } : null);
+
+      toast.success('Présentoir réservé avec succès');
+      setShowReservationModal(false);
+    } catch (error) {
+      console.error('Error making reservation:', error);
+      toast.error('Erreur lors de la réservation');
+    }
+  };
+
+  const handleUsageReport = async (data: { visitorsCount: number; usageHours: number }) => {
+    if (!stand) return;
+
+    try {
+      const standRef = doc(db, 'stands', stand.id);
+      await updateDoc(standRef, {
+        usageHistory: [
+          ...(stand.usageHistory || []),
           {
-            id: crypto.randomUUID(),
-            type: 'curative',
             date: new Date().toISOString(),
-            issues: data.issues,
-            description: data.description,
-            status: 'pending',
-            requestedBy: stand.reservedBy || 'Anonyme'
+            visitorsCount: data.visitorsCount,
+            usageHours: data.usageHours
           }
         ],
         lastUpdated: serverTimestamp()
       });
 
-      toast.success('Demande de maintenance envoyée avec succès');
-      setShowMaintenanceRequestModal(false);
+      toast.success('Rapport d\'utilisation enregistré');
+      setShowUsageModal(false);
     } catch (error) {
-      console.error('Erreur lors de l\'envoi de la demande:', error);
-      toast.error('Erreur lors de l\'envoi de la demande');
+      console.error('Error submitting usage report:', error);
+      toast.error('Erreur lors de l\'envoi du rapport');
     }
   };
 
@@ -114,24 +161,40 @@ const PublicStandView: React.FC = () => {
 
               <div className="space-y-4">
                 {stand.isReserved ? (
-                  <div className="p-4 bg-red-50 rounded-lg">
-                    <div className="flex items-center text-red-700 mb-2">
-                      <User className="h-5 w-5 mr-2" />
-                      <span className="font-medium">Réservé par: {stand.reservedBy}</span>
+                  <>
+                    <div className="p-4 bg-red-50 rounded-lg">
+                      <div className="flex items-center text-red-700 mb-2">
+                        <User className="h-5 w-5 mr-2" />
+                        <span className="font-medium">Réservé par: {stand.reservedBy}</span>
+                      </div>
+                      <div className="flex items-center text-red-700">
+                        <Calendar className="h-5 w-5 mr-2" />
+                        <span>Jusqu'au: {formatDateSafely(stand.reservedUntil)}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center text-red-700">
-                      <Calendar className="h-5 w-5 mr-2" />
-                      <span>Jusqu'au: {formatDateSafely(stand.reservedUntil)}</span>
-                    </div>
-                  </div>
+                    <button
+                      onClick={() => setShowUsageModal(true)}
+                      className="btn bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl w-full"
+                    >
+                      <Clock className="h-4 w-4 mr-2" />
+                      Rapport d'utilisation
+                    </button>
+                  </>
                 ) : (
                   <div className="p-4 bg-green-50 rounded-lg">
                     <h3 className="text-lg font-medium text-green-800 mb-2">
                       Présentoir disponible
                     </h3>
-                    <p className="text-green-700">
+                    <p className="text-green-700 mb-4">
                       Ce présentoir est actuellement disponible pour réservation.
                     </p>
+                    <button
+                      onClick={() => setShowReservationModal(true)}
+                      className="btn bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl w-full"
+                    >
+                      <Calendar className="h-4 w-4 mr-2" />
+                      Réserver
+                    </button>
                   </div>
                 )}
 
@@ -154,6 +217,24 @@ const PublicStandView: React.FC = () => {
           isOpen={showMaintenanceRequestModal}
           onClose={() => setShowMaintenanceRequestModal(false)}
           onSubmit={handleMaintenanceRequest}
+        />
+      )}
+
+      {showReservationModal && (
+        <ReservationModal
+          stand={stand}
+          isOpen={showReservationModal}
+          onClose={() => setShowReservationModal(false)}
+          onReserve={handleReservation}
+        />
+      )}
+
+      {showUsageModal && (
+        <UsageReportModal
+          stand={stand}
+          isOpen={showUsageModal}
+          onClose={() => setShowUsageModal(false)}
+          onSubmit={handleUsageReport}
         />
       )}
     </div>

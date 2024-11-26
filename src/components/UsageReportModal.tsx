@@ -29,6 +29,11 @@ const UsageReportModal: React.FC<UsageReportModalProps> = ({
       return;
     }
 
+    if (formData.usageHours > 24) {
+      toast.error('Le nombre d\'heures ne peut pas dépasser 24');
+      return;
+    }
+
     onSubmit(formData);
     onClose();
   };
