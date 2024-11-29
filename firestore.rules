@@ -20,7 +20,7 @@ service cloud.firestore {
 
     // Organizations collection
     match /organizations/{organizationId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (
         belongsToOrganization(organizationId) || isUserAdmin()
@@ -40,7 +40,7 @@ service cloud.firestore {
 
     // Stands collection
     match /stands/{standId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && isUserAdmin();
@@ -48,7 +48,7 @@ service cloud.firestore {
 
     // Posters collection
     match /posters/{posterId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && isUserAdmin();
@@ -56,15 +56,7 @@ service cloud.firestore {
 
     // Publications collection
     match /publications/{publicationId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated() && isUserAdmin();
-    }
-
-    // Notifications collection
-    match /notifications/{notificationId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && isUserAdmin();
@@ -72,7 +64,7 @@ service cloud.firestore {
 
     // Maintenance collection
     match /maintenance/{maintenanceId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && isUserAdmin();
