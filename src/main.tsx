@@ -8,7 +8,6 @@ import { StandsProvider } from './context/StandsContext';
 import { SettingsProvider } from './context/SettingsContext';
 import './lib/firebase';
 
-// Initialize the app with all providers
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>

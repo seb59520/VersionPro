@@ -20,6 +20,7 @@ import MaintenanceDashboard from './components/MaintenanceDashboard';
 import StandDetailPage from './components/StandDetailPage';
 import Unauthorized from './components/Unauthorized';
 import HelpPage from './components/HelpPage';
+import DashboardViewsWrapper from './components/dashboard/DashboardViewsWrapper';
 
 const App: React.FC = () => {
   return (
@@ -48,6 +49,9 @@ const App: React.FC = () => {
             <Route index element={<Dashboard />} />
             <Route path="statistics" element={<Statistics />} />
             <Route path="maintenance" element={<MaintenanceDashboard />} />
+            
+            {/* Routes du tableau de bord */}
+            <Route path="stands/*" element={<DashboardViewsWrapper />} />
             
             {/* Routes des paramètres */}
             <Route path="settings" element={<Settings />} />
